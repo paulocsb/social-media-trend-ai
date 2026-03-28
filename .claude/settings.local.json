@@ -15,7 +15,9 @@
       "Bash(__NEW_LINE_fd2d541a8d0bfb13__ sed:*)",
       "Bash(sed -i '' \"s/    mutationFn: \\(\\) => api.triggerCollection\\(\\),/    mutationFn: \\(\\) => activeCampaignId ? api.triggerCollection\\(activeCampaignId\\) : Promise.reject\\(new Error\\(''No campaign''\\)\\),/\" JobsPanel.tsx)",
       "Bash(sed -i '' \"s/    mutationFn: \\(\\) => api.triggerProfileCollection\\(\\),/    mutationFn: \\(\\) => activeCampaignId ? api.triggerProfileCollection\\(activeCampaignId\\) : Promise.reject\\(new Error\\(''No campaign''\\)\\),/\" JobsPanel.tsx)",
-      "Bash(__NEW_LINE_fd2d541a8d0bfb13__ echo:*)"
+      "Bash(__NEW_LINE_fd2d541a8d0bfb13__ echo:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

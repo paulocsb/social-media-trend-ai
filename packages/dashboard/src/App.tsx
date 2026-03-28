@@ -5,13 +5,16 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 import { CampaignProvider } from './lib/campaign';
 import { AppLayout } from './components/layout/AppLayout';
-import { LoginPage }    from './features/auth/Login';
-import { HomePage }     from './pages/HomePage';
-import { AnalisePage }  from './pages/AnalisePage';
-import { HistoryPage }  from './pages/HistoryPage';
-import { SetupPage }    from './pages/SetupPage';
+import { LoginPage }         from './features/auth/Login';
+import { SignUpPage }        from './features/auth/SignUp';
+import { ForgotPasswordPage } from './features/auth/ForgotPassword';
+import { ResetPasswordPage } from './features/auth/ResetPassword';
+import { HomePage }          from './pages/HomePage';
+import { AnalisePage }       from './pages/AnalisePage';
+import { HistoryPage }       from './pages/HistoryPage';
+import { SetupPage }         from './pages/SetupPage';
 import { ConfiguracoesPage } from './pages/ConfiguracoesPage';
-import { ContaPage }    from './pages/ContaPage';
+import { ContaPage }         from './pages/ContaPage';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
@@ -38,7 +41,15 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={session ? <Navigate to="/" replace /> : <LoginPage />} />
+          {/* Public auth routes — redirect to app if already signed in */}
+          <Route path="/login"          element={session ? <Navigate to="/" replace /> : <LoginPage />} />
+          <Route path="/signup"         element={session ? <Navigate to="/" replace /> : <SignUpPage />} />
+          <Route path="/forgot-password" element={session ? <Navigate to="/" replace /> : <ForgotPasswordPage />} />
+
+          {/* Reset password — always accessible (Supabase creates a recovery session) */}
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+
+          {/* Protected app routes */}
           <Route
             element={
               session
@@ -53,6 +64,7 @@ export function App() {
             <Route path="/settings" element={<ConfiguracoesPage />} />
             <Route path="/account"  element={<ContaPage />} />
           </Route>
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
