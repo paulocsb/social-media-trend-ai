@@ -23,9 +23,7 @@ export function LoginPage() {
 
   return (
     <AuthLayout title="Trend Intel" subtitle="Instagram trend intelligence">
-      <OAuthButtons />
-
-      <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-1.5">
           <label className="text-[13px] font-medium text-primary">Email</label>
           <Input
@@ -69,7 +67,9 @@ export function LoginPage() {
         </Button>
       </form>
 
-      <div className="mt-5 pt-5 border-t border-border-subtle text-center">
+      <OAuthButtons />
+
+      <div className="mt-4 text-center">
         <p className="text-[13px] text-secondary">
           Don't have an account?{' '}
           <Link to="/signup" className="text-accent hover:underline font-medium">
