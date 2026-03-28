@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { AuthLayout } from './AuthLayout';
+import { OAuthButtons } from './OAuthButtons';
 
 export function SignUpPage() {
   const [email, setEmail] = useState('');
@@ -62,7 +63,9 @@ export function SignUpPage() {
 
   return (
     <AuthLayout title="Create account" subtitle="Start monitoring Instagram trends">
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <OAuthButtons label="Sign up with" />
+
+      <form onSubmit={handleSubmit} className="mt-4 space-y-4">
         <div className="space-y-1.5">
           <label className="text-[13px] font-medium text-primary">Email</label>
           <Input

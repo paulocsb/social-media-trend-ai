@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { AuthLayout } from './AuthLayout';
+import { OAuthButtons } from './OAuthButtons';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -22,7 +23,9 @@ export function LoginPage() {
 
   return (
     <AuthLayout title="Trend Intel" subtitle="Instagram trend intelligence">
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <OAuthButtons />
+
+      <form onSubmit={handleSubmit} className="mt-4 space-y-4">
         <div className="space-y-1.5">
           <label className="text-[13px] font-medium text-primary">Email</label>
           <Input
