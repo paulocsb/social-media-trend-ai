@@ -3,18 +3,16 @@
   "private": true,
   "scripts": {
     "dev": "turbo dev",
-    "start": "docker compose -f infra/docker-compose.yml up -d && turbo dev",
-    "infra": "docker compose -f infra/docker-compose.yml up -d",
-    "infra:down": "docker compose -f infra/docker-compose.yml down",
     "build": "turbo build",
     "lint": "turbo lint",
     "test": "turbo test",
-    "typecheck": "turbo typecheck"
+    "typecheck": "turbo typecheck",
+    "supabase": "supabase"
   },
   "devDependencies": {
-    "@types/lodash": "^4.17.24",
     "turbo": "^1.13.4",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "supabase": "^1.175.0"
   },
   "engines": {
     "node": ">=20",

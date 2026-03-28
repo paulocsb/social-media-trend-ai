@@ -1,8 +1,0 @@
-[build]
-builder = "NIXPACKS"
-buildCommand = "pnpm install --frozen-lockfile && turbo build --filter=@trend/collector..."
-
-[deploy]
-startCommand = "node packages/collector/dist/index.js"
-restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 3

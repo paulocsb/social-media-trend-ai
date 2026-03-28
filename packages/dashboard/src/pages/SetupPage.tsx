@@ -1,417 +1,286 @@
-import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  Plus, Pencil, Trash2, ToggleLeft, ToggleRight,
-  Megaphone, SlidersHorizontal, Hash, User2, Check, AlertCircle,
-} from 'lucide-react'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { api, type Campaign } from '@/lib/api'
-import { useCampaign } from '@/lib/campaign'
-import { HashtagManager } from '@/features/hashtags/HashtagManager'
-import { ProfileManager } from '@/features/profiles/ProfileManager'
-import { cn } from '@/lib/utils'
+import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Plus, Trash2, Hash, User, Megaphone, X } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { useCampaign, type Campaign } from '../lib/campaign';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Badge } from '../components/ui/badge';
+import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
+import { cn } from '../lib/utils';
+import type { Tables } from '@trend/shared';
 
-// ─── Campaign form modal ───────────────────────────────────────────────────────
+type Tab = 'campaigns' | 'hashtags' | 'profiles';
 
-const PRESET_COLORS = [
-  '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#ef4444',
-  '#f97316', '#eab308', '#22c55e', '#14b8a6', '#0ea5e9',
-]
+const TABS: { id: Tab; label: string; icon: typeof Hash }[] = [
+  { id: 'campaigns', label: 'Campaigns', icon: Megaphone },
+  { id: 'hashtags',  label: 'Hashtags',  icon: Hash },
+  { id: 'profiles',  label: 'Profiles',  icon: User },
+];
 
-function CampaignFormModal({ initial, onClose }: { initial?: Campaign; onClose: () => void }) {
-  const qc = useQueryClient()
-  const [name, setName] = useState(initial?.name ?? '')
-  const [description, setDescription] = useState(initial?.description ?? '')
-  const [color, setColor] = useState(initial?.color ?? PRESET_COLORS[0])
-  const [error, setError] = useState('')
+const COLORS = ['#6366f1','#0071E3','#34C759','#FF9F0A','#FF3B30','#AF52DE','#FF2D55','#5AC8FA'];
 
-  const createMutation = useMutation({
-    mutationFn: () => api.createCampaign({ name: name.trim(), description: description.trim() || undefined, color }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); onClose() },
-    onError: (e: Error) => setError(e.message),
-  })
-
-  const updateMutation = useMutation({
-    mutationFn: () => api.updateCampaign(initial!.id, { name: name.trim(), description: description.trim() || null, color }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); onClose() },
-    onError: (e: Error) => setError(e.message),
-  })
-
-  const isPending = createMutation.isPending || updateMutation.isPending
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError('')
-    if (!name.trim()) { setError('Campaign name is required'); return }
-    if (initial) updateMutation.mutate()
-    else createMutation.mutate()
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-xl">
-        <h2 className="mb-4 text-lg font-semibold">{initial ? 'Edit campaign' : 'New campaign'}</h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">Name</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Black Friday 2025"
-              className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-              autoFocus
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">
-              Description <span className="text-muted-foreground">(optional)</span>
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="What is this campaign about?"
-              rows={2}
-              className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">Color</label>
-            <div className="flex gap-2">
-              {PRESET_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setColor(c)}
-                  className="h-7 w-7 rounded-full transition-transform hover:scale-110"
-                  style={{
-                    backgroundColor: c,
-                    outline: color === c ? `3px solid ${c}` : undefined,
-                    outlineOffset: color === c ? '2px' : undefined,
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <div className="flex gap-2 pt-1">
-            <button
-              type="submit"
-              disabled={isPending}
-              className="flex-1 rounded-lg bg-primary py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              {isPending ? 'Saving…' : initial ? 'Save changes' : 'Create campaign'}
-            </button>
-            <button type="button" onClick={onClose} className="rounded-lg border px-4 py-2 text-sm hover:bg-accent">
-              Cancel
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-// ─── Campaign card ─────────────────────────────────────────────────────────────
-
-function CampaignCard({ campaign }: { campaign: Campaign }) {
-  const qc = useQueryClient()
-  const { activeCampaignId, setActiveCampaignId } = useCampaign()
-  const [editing, setEditing] = useState(false)
-  const isActive = campaign.id === activeCampaignId
-
-  const toggleMutation = useMutation({
-    mutationFn: () => api.updateCampaign(campaign.id, { active: !campaign.active }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['campaigns'] }),
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: () => api.deleteCampaign(campaign.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['campaigns'] }),
-  })
-
-  function handleDelete() {
-    if (!confirm(`Delete campaign "${campaign.name}"? All associated data will be permanently removed.`)) return
-    deleteMutation.mutate()
-  }
-
-  return (
-    <>
-      {editing && <CampaignFormModal initial={campaign} onClose={() => setEditing(false)} />}
-      <div className={`group relative flex items-start gap-4 rounded-xl border p-4 transition-all hover:shadow-sm ${isActive ? 'border-primary/50 bg-primary/5' : 'bg-card'}`}>
-        <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: campaign.color + '20' }}>
-          <div className="h-4 w-4 rounded-full" style={{ backgroundColor: campaign.color }} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-medium truncate">{campaign.name}</span>
-            {!campaign.active && (
-              <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">Archived</span>
-            )}
-            {isActive && (
-              <span className="rounded-full px-2 py-0.5 text-xs font-medium" style={{ backgroundColor: campaign.color + '20', color: campaign.color }}>
-                Active
-              </span>
-            )}
-          </div>
-          {campaign.description && (
-            <p className="mt-0.5 text-sm text-muted-foreground truncate">{campaign.description}</p>
-          )}
-          <p className="mt-1 text-xs text-muted-foreground">
-            Created {new Date(campaign.createdAt).toLocaleDateString()}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {!isActive && (
-            <button
-              onClick={() => setActiveCampaignId(campaign.id)}
-              className="rounded-lg px-3 py-1.5 text-xs font-medium border hover:bg-accent transition-colors"
-            >
-              Switch to
-            </button>
-          )}
-          <button
-            onClick={() => toggleMutation.mutate()}
-            className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            title={campaign.active ? 'Archive' : 'Restore'}
-          >
-            {campaign.active
-              ? <ToggleRight className="h-4 w-4 text-primary" />
-              : <ToggleLeft className="h-4 w-4" />}
-          </button>
-          <button
-            onClick={() => setEditing(true)}
-            className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-          >
-            <Pencil className="h-4 w-4" />
-          </button>
-          <button
-            onClick={handleDelete}
-            className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-    </>
-  )
-}
-
-// ─── Campaigns tab ─────────────────────────────────────────────────────────────
-
+// ----- Campaign tab -----
 function CampaignsTab() {
-  const { campaigns, isLoading } = useCampaign()
-  const [creating, setCreating] = useState(false)
+  const { campaigns, activeCampaignId, setActiveCampaignId } = useCampaign();
+  const qc = useQueryClient();
+  const { data: { user } } = useQuery({ queryKey: ['user'], queryFn: () => supabase.auth.getUser() }).data ?? { data: { user: null } };
 
-  return (
-    <div className="space-y-4">
-      {creating && <CampaignFormModal onClose={() => setCreating(false)} />}
+  const [form, setForm] = useState({ name: '', description: '', color: COLORS[0] });
+  const [editId, setEditId] = useState<string | null>(null);
 
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Each campaign has its own hashtags, profiles, collections and analyses.
-        </p>
-        <button
-          onClick={() => setCreating(true)}
-          className="flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 shrink-0"
-        >
-          <Plus className="h-4 w-4" />
-          New campaign
-        </button>
-      </div>
+  const save = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error('Not signed in');
+      if (editId) {
+        await supabase.from('campaigns').update({ name: form.name, description: form.description || null, color: form.color }).eq('id', editId);
+      } else {
+        await supabase.from('campaigns').insert({ user_id: user.id, name: form.name, description: form.description || null, color: form.color });
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['campaigns'] });
+      setForm({ name: '', description: '', color: COLORS[0] });
+      setEditId(null);
+    },
+  });
 
-      {isLoading ? (
-        <div className="space-y-3">
-          {[1, 2].map((i) => <div key={i} className="h-20 animate-pulse rounded-xl border bg-muted" />)}
-        </div>
-      ) : campaigns.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-12 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
-            <Megaphone className="h-6 w-6 text-muted-foreground" />
-          </div>
-          <div>
-            <p className="font-medium">No campaigns yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Create a campaign to start collecting and analysing trends.
-            </p>
-          </div>
-          <button
-            onClick={() => setCreating(true)}
-            className="mt-2 flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
-          >
-            <Plus className="h-4 w-4" />
-            Create first campaign
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {campaigns.map((c) => <CampaignCard key={c.id} campaign={c} />)}
-        </div>
-      )}
-    </div>
-  )
-}
+  const del = useMutation({
+    mutationFn: (id: string) => supabase.from('campaigns').delete().eq('id', id).then(({ error }) => { if (error) throw error; }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['campaigns'] }),
+  });
 
-// ─── No campaign notice (shown inside hashtag/profile tabs) ────────────────────
-
-function NoCampaignNotice({ onGoToCampaigns }: { onGoToCampaigns: () => void }) {
-  return (
-    <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-10 text-center">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/30">
-        <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-      </div>
-      <div>
-        <p className="font-medium">No campaign selected</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          You need a campaign before adding hashtags or profiles.
-        </p>
-      </div>
-      <button
-        onClick={onGoToCampaigns}
-        className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
-      >
-        <Megaphone className="h-4 w-4" />
-        Create a campaign first
-      </button>
-    </div>
-  )
-}
-
-// ─── Setup steps guide ─────────────────────────────────────────────────────────
-
-const SETUP_STEPS = [
-  {
-    id: 'campaigns' as const,
-    icon: Megaphone,
-    title: 'Campaign',
-    description: 'Create a campaign to group your data.',
-  },
-  {
-    id: 'hashtags' as const,
-    icon: Hash,
-    title: 'Hashtags',
-    description: 'Add hashtags to monitor for trending posts.',
-  },
-  {
-    id: 'profiles' as const,
-    icon: User2,
-    title: 'Profiles',
-    description: 'Optionally track specific Instagram accounts.',
-  },
-]
-
-function SetupGuide({
-  activeTab,
-  hasCampaign,
-  onSelect,
-}: {
-  activeTab: string
-  hasCampaign: boolean
-  onSelect: (tab: string) => void
-}) {
-  return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-      {SETUP_STEPS.map((step, i) => {
-        const Icon = step.icon
-        const isActive = activeTab === step.id
-        const isLocked = i > 0 && !hasCampaign
-
-        return (
-          <button
-            key={step.id}
-            onClick={() => !isLocked && onSelect(step.id)}
-            disabled={isLocked}
-            className={cn(
-              'flex items-start gap-3 rounded-xl border p-4 text-left transition-all',
-              isActive
-                ? 'border-primary bg-primary/5 shadow-sm'
-                : isLocked
-                  ? 'cursor-not-allowed opacity-40'
-                  : 'bg-card hover:shadow-sm hover:border-border/80',
-            )}
-          >
-            <div className={cn(
-              'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold',
-              isActive ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
-            )}>
-              {i === 0 && hasCampaign
-                ? <Check className="h-3.5 w-3.5 text-emerald-500" />
-                : <Icon className="h-3.5 w-3.5" />
-              }
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-semibold text-muted-foreground">Step {i + 1}</span>
-              </div>
-              <p className="text-sm font-medium leading-snug">{step.title}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground leading-snug">{step.description}</p>
-            </div>
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-// ─── Page ──────────────────────────────────────────────────────────────────────
-
-export function SetupPage() {
-  const { campaigns, activeCampaign } = useCampaign()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const tab = searchParams.get('tab') ?? 'campaigns'
-  const hasCampaign = campaigns.length > 0
-
-  function setTab(value: string) {
-    setSearchParams({ tab: value }, { replace: true })
+  function startEdit(c: Campaign) {
+    setEditId(c.id);
+    setForm({ name: c.name, description: c.description ?? '', color: c.color });
   }
 
   return (
-    <>
-      <div className="flex items-center gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
-          <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+    <div className="space-y-5">
+      {/* Form */}
+      <Card>
+        <CardHeader><CardTitle>{editId ? 'Edit Campaign' : 'New Campaign'}</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <Input placeholder="Campaign name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Input placeholder="Description (optional)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <div className="flex gap-2">
+            {COLORS.map((c) => (
+              <button
+                key={c}
+                onClick={() => setForm({ ...form, color: c })}
+                className={cn('w-6 h-6 rounded-full transition-transform', form.color === c && 'ring-2 ring-offset-2 ring-accent scale-110')}
+                style={{ background: c }}
+              />
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={() => save.mutate()} disabled={!form.name.trim() || save.isPending}>
+              {editId ? 'Update' : 'Create'}
+            </Button>
+            {editId && <Button variant="secondary" onClick={() => { setEditId(null); setForm({ name: '', description: '', color: COLORS[0] }); }}>Cancel</Button>}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* List */}
+      <div className="space-y-2">
+        {campaigns.map((c) => (
+          <div key={c.id} className={cn('flex items-center gap-3 px-4 py-3 rounded-lg bg-surface shadow-card')}>
+            <div className="w-3 h-3 rounded-full shrink-0" style={{ background: c.color }} />
+            <div className="flex-1 min-w-0">
+              <p className="text-[14px] font-medium">{c.name}</p>
+              {c.description && <p className="text-caption">{c.description}</p>}
+            </div>
+            {activeCampaignId === c.id ? (
+              <Badge variant="default">Active</Badge>
+            ) : (
+              <Button variant="secondary" size="sm" onClick={() => setActiveCampaignId(c.id)}>Select</Button>
+            )}
+            <button onClick={() => startEdit(c)} className="text-secondary hover:text-primary transition-colors">
+              <span className="text-[13px]">Edit</span>
+            </button>
+            <button onClick={() => del.mutate(c.id)} className="text-secondary hover:text-destructive transition-colors">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ----- Hashtags tab -----
+function HashtagsTab() {
+  const { activeCampaignId } = useCampaign();
+  const qc = useQueryClient();
+  const [input, setInput] = useState('');
+
+  const { data: rows = [] } = useQuery({
+    queryKey: ['hashtags', activeCampaignId],
+    queryFn: async () => {
+      const { data } = await supabase.from('tracked_hashtags').select('*').eq('campaign_id', activeCampaignId!).order('created_at');
+      return data ?? [];
+    },
+    enabled: Boolean(activeCampaignId),
+  });
+
+  const add = useMutation({
+    mutationFn: async (tag: string) => {
+      const clean = tag.replace(/^#/, '').toLowerCase().trim();
+      if (!clean) return;
+      await supabase.from('tracked_hashtags').insert({ campaign_id: activeCampaignId!, hashtag: clean });
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['hashtags'] }); setInput(''); },
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: string) => supabase.from('tracked_hashtags').delete().eq('id', id).then(({ error }) => { if (error) throw error; }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hashtags'] }),
+  });
+
+  const toggle = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      supabase.from('tracked_hashtags').update({ active }).eq('id', id).then(({ error }) => { if (error) throw error; }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hashtags'] }),
+  });
+
+  function handleAdd() {
+    const tags = input.split(/[\s,]+/).filter(Boolean);
+    tags.forEach((t) => add.mutate(t));
+  }
+
+  return (
+    <Card>
+      <CardHeader><CardTitle>Tracked Hashtags</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex gap-2">
+          <Input
+            placeholder="#marketing, #socialmedia"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+          />
+          <Button onClick={handleAdd} size="md" className="shrink-0"><Plus className="w-4 h-4" /></Button>
         </div>
-        <div>
-          <h1 className="text-xl font-semibold">Setup</h1>
-          <p className="text-sm text-muted-foreground">
-            {activeCampaign
-              ? <span className="flex items-center gap-1.5">
-                  <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: activeCampaign.color }} />
-                  {activeCampaign.name}
-                </span>
-              : 'Configure campaigns, hashtags and tracked profiles'
-            }
-          </p>
+
+        <div className="flex flex-wrap gap-2">
+          {rows.map((row) => (
+            <div
+              key={row.id}
+              className={cn(
+                'flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full text-[13px] font-medium transition-all',
+                row.active ? 'bg-accent/10 text-accent' : 'bg-[#E8E8ED] text-tertiary',
+              )}
+            >
+              <button onClick={() => toggle.mutate({ id: row.id, active: !row.active })} className="hover:opacity-70">
+                #{row.hashtag}
+              </button>
+              <button onClick={() => remove.mutate(row.id)} className="hover:text-destructive">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+          {rows.length === 0 && <p className="text-caption">No hashtags tracked yet.</p>}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ----- Profiles tab -----
+function ProfilesTab() {
+  const { activeCampaignId } = useCampaign();
+  const qc = useQueryClient();
+  const [input, setInput] = useState('');
+
+  const { data: rows = [] } = useQuery({
+    queryKey: ['profiles', activeCampaignId],
+    queryFn: async () => {
+      const { data } = await supabase.from('tracked_profiles').select('*').eq('campaign_id', activeCampaignId!).order('created_at');
+      return data ?? [];
+    },
+    enabled: Boolean(activeCampaignId),
+  });
+
+  const add = useMutation({
+    mutationFn: async (handle: string) => {
+      const clean = handle.replace(/^@/, '').toLowerCase().trim();
+      if (!clean) return;
+      await supabase.from('tracked_profiles').insert({ campaign_id: activeCampaignId!, handle: clean });
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['profiles'] }); setInput(''); },
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: string) => supabase.from('tracked_profiles').delete().eq('id', id).then(({ error }) => { if (error) throw error; }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['profiles'] }),
+  });
+
+  function handleAdd() {
+    const handles = input.split(/[\s,]+/).filter(Boolean);
+    handles.forEach((h) => add.mutate(h));
+  }
+
+  return (
+    <Card>
+      <CardHeader><CardTitle>Tracked Profiles</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex gap-2">
+          <Input
+            placeholder="@nike, @adidas"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+          />
+          <Button onClick={handleAdd} size="md" className="shrink-0"><Plus className="w-4 h-4" /></Button>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {rows.map((row) => (
+            <div key={row.id} className="flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full text-[13px] font-medium bg-accent/10 text-accent">
+              @{row.handle}
+              <button onClick={() => remove.mutate(row.id)} className="hover:text-destructive">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+          {rows.length === 0 && <p className="text-caption">No profiles tracked yet.</p>}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ----- Page -----
+export function SetupPage() {
+  const [params, setParams] = useSearchParams();
+  const tab = (params.get('tab') as Tab) ?? 'campaigns';
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <h1 className="text-title-xl">Setup</h1>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-[#E8E8ED] p-1 rounded-lg w-fit">
+        {TABS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => setParams({ tab: id })}
+            className={cn(
+              'flex items-center gap-1.5 px-4 py-1.5 rounded-md text-[14px] font-medium transition-all',
+              tab === id ? 'bg-surface text-primary shadow-subtle' : 'text-secondary hover:text-primary',
+            )}
+          >
+            <Icon className="w-3.5 h-3.5" />
+            {label}
+          </button>
+        ))}
       </div>
 
-      <SetupGuide activeTab={tab} hasCampaign={hasCampaign} onSelect={setTab} />
-
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
-          <TabsTrigger value="hashtags" disabled={!hasCampaign}>Hashtags</TabsTrigger>
-          <TabsTrigger value="profiles" disabled={!hasCampaign}>Profiles</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="campaigns">
-          <CampaignsTab />
-        </TabsContent>
-
-        <TabsContent value="hashtags">
-          {hasCampaign
-            ? <HashtagManager />
-            : <NoCampaignNotice onGoToCampaigns={() => setTab('campaigns')} />
-          }
-        </TabsContent>
-
-        <TabsContent value="profiles">
-          {hasCampaign
-            ? <ProfileManager />
-            : <NoCampaignNotice onGoToCampaigns={() => setTab('campaigns')} />
-          }
-        </TabsContent>
-      </Tabs>
-    </>
-  )
+      {tab === 'campaigns' && <CampaignsTab />}
+      {tab === 'hashtags'  && <HashtagsTab />}
+      {tab === 'profiles'  && <ProfilesTab />}
+    </div>
+  );
 }

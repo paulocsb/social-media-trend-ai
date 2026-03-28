@@ -1,565 +1,271 @@
-import { useState, useEffect, useRef } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
-import {
-  Zap, Hash, User2, CheckCircle2, XCircle, Loader2,
-  TrendingUp, Newspaper, Megaphone, ArrowRight, RefreshCw,
-  BarChart3, SlidersHorizontal,
-} from 'lucide-react'
-import { Link } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
-import { api } from '@/lib/api'
-import { useCampaign } from '@/lib/campaign'
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Play, Hash, TrendingUp, Clock, AlertCircle } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { useCampaign } from '../lib/campaign';
+import { Button } from '../components/ui/button';
+import { Badge } from '../components/ui/badge';
+import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
+import { relativeTime, formatNumber, cn } from '../lib/utils';
+import type { Tables } from '@trend/shared';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+type CollectionRun = Tables<'collection_runs'>;
+type ScoredPost = Tables<'scored_posts'>;
 
-type CollectState = 'idle' | 'running' | 'done'
-type RunTarget    = 'hashtags' | 'profiles' | 'both'
-type QueueCounts  = { waiting: number; active: number; completed: number; failed: number; delayed: number }
-type QueueStat    = { name: string; counts: QueueCounts }
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function relativeDate(iso: string): string {
-  const diff  = Date.now() - new Date(iso).getTime()
-  const mins  = Math.floor(diff / 60_000)
-  const hours = Math.floor(diff / 3_600_000)
-  const days  = Math.floor(diff / 86_400_000)
-  if (mins  < 1)  return 'just now'
-  if (mins  < 60) return `${mins}m ago`
-  if (hours < 24) return `${hours}h ago`
-  if (days  < 7)  return `${days}d ago`
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-// ─── Empty state: no campaign ─────────────────────────────────────────────────
-
-function NoCampaignState() {
+function ScoreBar({ score }: { score: number }) {
+  const pct = Math.min(100, Math.max(0, score));
+  const color = pct >= 70 ? 'bg-success' : pct >= 40 ? 'bg-warning' : 'bg-tertiary';
   return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
-        <Megaphone className="h-8 w-8 text-muted-foreground" />
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-1 bg-[#E8E8ED] rounded-full overflow-hidden">
+        <div className={cn('h-full rounded-full transition-all', color)} style={{ width: `${pct}%` }} />
       </div>
-      <div>
-        <h2 className="text-lg font-semibold">No campaigns yet</h2>
-        <p className="mt-1 text-sm text-muted-foreground max-w-xs">
-          Create your first campaign to start tracking hashtags, collecting data and detecting trends.
-        </p>
-      </div>
-      <Button asChild>
-        <Link to="/setup">
-          <SlidersHorizontal className="h-4 w-4" />
-          Go to Setup
-        </Link>
-      </Button>
+      <span className="text-[12px] font-medium text-secondary w-7 text-right">{pct.toFixed(0)}</span>
     </div>
-  )
+  );
 }
-
-// ─── No sources banner ────────────────────────────────────────────────────────
-
-function NoSourcesBanner() {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/50 dark:bg-amber-900/20">
-      <div className="flex items-center gap-2.5">
-        <SlidersHorizontal className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-        <p className="text-sm text-amber-800 dark:text-amber-300">
-          Add hashtags or profiles to this campaign before running a collection.
-        </p>
-      </div>
-      <Button variant="outline" size="sm" className="shrink-0 border-amber-300 hover:bg-amber-100 dark:border-amber-700 dark:hover:bg-amber-900/40" asChild>
-        <Link to="/setup?tab=hashtags">Set up <ArrowRight className="h-3 w-3" /></Link>
-      </Button>
-    </div>
-  )
-}
-
-// ─── Queue progress bar ───────────────────────────────────────────────────────
-
-function QueueBar({ queue, seenActive }: { queue: QueueStat; seenActive: boolean }) {
-  const { waiting, active, completed, failed } = queue.counts
-  const total = waiting + active + completed + failed
-  const pct   = total > 0 ? Math.round((completed / total) * 100) : 0
-  const busy  = active > 0 || waiting > 0
-
-  const LABEL: Record<string, string> = { 'collect:hashtag': 'Hashtags', 'collect:profile': 'Profiles' }
-
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-sm">
-        <div className="flex items-center gap-1.5">
-          {busy
-            ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-            : failed > 0 && completed === 0
-              ? <XCircle className="h-3.5 w-3.5 text-destructive" />
-              : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-          }
-          <span className="font-medium">{LABEL[queue.name] ?? queue.name}</span>
-        </div>
-        <span className="tabular-nums text-muted-foreground">{pct}%</span>
-      </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-        <div
-          className={cn('h-full rounded-full transition-all duration-700', failed > 0 && completed === 0 ? 'bg-destructive' : 'bg-primary')}
-          style={{ width: `${seenActive ? pct : 0}%` }}
-        />
-      </div>
-    </div>
-  )
-}
-
-// ─── Collection section ───────────────────────────────────────────────────────
-
-function CollectionSection({ hasHashtags, hasProfiles, lastRun }: {
-  hasHashtags: boolean
-  hasProfiles: boolean
-  lastRun: { startedAt: string; postsFound: number | null; eventsFound: number | null } | null
-}) {
-  const { activeCampaignId } = useCampaign()
-  const [state, setState] = useState<CollectState>('idle')
-  const [target, setTarget] = useState<RunTarget>('both')
-  const [runId,  setRunId]  = useState<string | null>(null)
-  const [elapsed, setElapsed] = useState(0)
-  const [doneInfo, setDoneInfo] = useState<{ posts: number; events: number } | null>(null)
-  const seenActiveRef = useRef(false)
-  const doneRef = useRef(false)
-
-  const canRun = (target === 'hashtags' && hasHashtags)
-    || (target === 'profiles' && hasProfiles)
-    || (target === 'both' && (hasHashtags || hasProfiles))
-  const hasAnySources = hasHashtags || hasProfiles
-
-  // Elapsed timer
-  useEffect(() => {
-    if (state !== 'running') { setElapsed(0); return }
-    const t = setInterval(() => setElapsed((s) => s + 1), 1000)
-    return () => clearInterval(t)
-  }, [state])
-
-  const elapsedStr = elapsed < 60 ? `${elapsed}s` : `${Math.floor(elapsed / 60)}m ${elapsed % 60}s`
-
-  // Poll jobs when running
-  const { data: jobsData } = useQuery({
-    queryKey: ['jobs-home'],
-    queryFn: () => api.getJobs(),
-    refetchInterval: 2_000,
-    enabled: state === 'running',
-  })
-
-  const queues = (jobsData?.queues ?? []) as QueueStat[]
-  const relevant = queues.filter((q) => {
-    if (target === 'both') return true
-    return target === 'hashtags' ? q.name === 'collect:hashtag' : q.name === 'collect:profile'
-  })
-
-  const totalActive  = relevant.reduce((s, q) => s + q.counts.active, 0)
-  const totalWaiting = relevant.reduce((s, q) => s + q.counts.waiting, 0)
-  const totalDone    = relevant.reduce((s, q) => s + q.counts.completed + q.counts.failed, 0)
-
-  if (totalActive > 0) seenActiveRef.current = true
-
-  // Auto-complete
-  useEffect(() => {
-    if (state !== 'running' || !seenActiveRef.current || doneRef.current) return
-    if (totalActive === 0 && totalWaiting === 0 && totalDone > 0) {
-      doneRef.current = true
-      setTimeout(async () => {
-        if (runId) {
-          try {
-            const [evData, hData] = await Promise.all([
-              activeCampaignId ? api.getEvents(activeCampaignId, 5) : Promise.resolve({ ok: true as const, events: [] }),
-              activeCampaignId ? api.getHashtagLeaderboard(activeCampaignId, '24h', 10) : Promise.resolve({ ok: true as const, hashtags: [] }),
-            ])
-            const evArr = (evData.events ?? []) as Array<{ id: string; title: string; strategy?: string }>
-            const hArr  = hData.hashtags ?? []
-            setDoneInfo({ posts: totalDone, events: evArr.length })
-            await api.completeRun(runId, {
-              status: 'completed',
-              postsFound: totalDone,
-              eventsFound: evArr.length,
-              topHashtags: hArr.slice(0, 10).map((h) => ({ hashtag: h.hashtag, score: h.score })),
-              topEvents: evArr.slice(0, 5).map((e) => ({ topic: e.title, strategy: e.strategy ?? null })),
-            }).catch(() => {})
-          } catch {}
-        }
-        setState('done')
-      }, 800)
-    }
-  }, [state, totalActive, totalWaiting, totalDone, runId, activeCampaignId])
-
-  const triggerHashtags = useMutation({ mutationFn: () => activeCampaignId ? api.triggerCollection(activeCampaignId) : Promise.reject(new Error('No campaign')) })
-  const triggerProfiles = useMutation({ mutationFn: () => activeCampaignId ? api.triggerProfileCollection(activeCampaignId) : Promise.reject(new Error('No campaign')) })
-
-  async function handleRun() {
-    if (!activeCampaignId || !canRun) return
-    const { run } = await api.createRun(activeCampaignId, target)
-    setRunId(run.id)
-    seenActiveRef.current = false
-    doneRef.current = false
-    if (target === 'hashtags' || target === 'both') await triggerHashtags.mutateAsync().catch(() => {})
-    if (target === 'profiles' || target === 'both') await triggerProfiles.mutateAsync().catch(() => {})
-    setState('running')
-  }
-
-  function handleReset() {
-    setState('idle')
-    setRunId(null)
-    setDoneInfo(null)
-    seenActiveRef.current = false
-    doneRef.current = false
-    triggerHashtags.reset()
-    triggerProfiles.reset()
-  }
-
-  const startError = triggerHashtags.error ?? triggerProfiles.error
-
-  // ── Idle ──
-  if (state === 'idle') {
-    return (
-      <div className="rounded-xl border bg-card p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Target pills */}
-          <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
-            {(['both', 'hashtags', 'profiles'] as RunTarget[]).map((t) => {
-              const labels: Record<RunTarget, string> = { both: 'Both', hashtags: 'Hashtags', profiles: 'Profiles' }
-              return (
-                <button
-                  key={t}
-                  onClick={() => setTarget(t)}
-                  className={cn(
-                    'rounded-md px-3 py-1 text-xs font-medium transition-colors',
-                    target === t ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  {labels[t]}
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Source counts */}
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <Hash className="h-3 w-3" /> {hasHashtags ? 'ready' : 'none'}
-            </span>
-            <span className="flex items-center gap-1">
-              <User2 className="h-3 w-3" /> {hasProfiles ? 'ready' : 'none'}
-            </span>
-          </div>
-
-          <div className="ml-auto flex items-center gap-3">
-            {/* Last run info */}
-            {lastRun && (
-              <span className="text-xs text-muted-foreground hidden sm:block">
-                Last: {relativeDate(lastRun.startedAt)}
-                {lastRun.postsFound != null && ` · ${lastRun.postsFound} posts`}
-              </span>
-            )}
-            {/* Run button */}
-            <Button
-              size="sm"
-              disabled={!hasAnySources || !canRun || triggerHashtags.isPending || triggerProfiles.isPending}
-              onClick={handleRun}
-              className="gap-1.5"
-            >
-              {(triggerHashtags.isPending || triggerProfiles.isPending)
-                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                : <Zap className="h-3.5 w-3.5" />
-              }
-              Run collection
-            </Button>
-          </div>
-        </div>
-
-        {startError && (
-          <div className="mt-3 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-            <XCircle className="h-3.5 w-3.5 shrink-0" />
-            {(startError as Error).message ?? 'Failed to trigger collection'}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // ── Running ──
-  if (state === 'running') {
-    return (
-      <div className="rounded-xl border bg-card p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            <span className="font-medium text-sm">Collecting…</span>
-          </div>
-          <span className="font-mono text-sm text-muted-foreground tabular-nums">{elapsedStr}</span>
-        </div>
-
-        {!seenActiveRef.current && (
-          <p className="text-xs text-muted-foreground animate-pulse">Waiting for workers to pick up jobs…</p>
-        )}
-
-        <div className="space-y-3">
-          {relevant.length === 0
-            ? Array.from({ length: target === 'both' ? 2 : 1 }).map((_, i) => (
-                <div key={i} className="h-8 animate-pulse rounded-lg bg-muted" />
-              ))
-            : relevant.map((q) => (
-                <QueueBar key={q.name} queue={q} seenActive={seenActiveRef.current} />
-              ))
-          }
-        </div>
-      </div>
-    )
-  }
-
-  // ── Done ──
-  return (
-    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800/50 dark:bg-emerald-900/20">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
-          <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-          <span className="text-sm font-medium text-emerald-800 dark:text-emerald-300">Collection complete</span>
-        </div>
-        {doneInfo && (
-          <div className="flex items-center gap-3 text-xs text-emerald-700 dark:text-emerald-400">
-            {doneInfo.events > 0 && (
-              <span className="flex items-center gap-1">
-                <Newspaper className="h-3 w-3" /> {doneInfo.events} event{doneInfo.events !== 1 ? 's' : ''} detected
-              </span>
-            )}
-          </div>
-        )}
-        <div className="ml-auto flex items-center gap-2">
-          <Button size="sm" asChild>
-            <Link to="/analysis"><Newspaper className="h-3.5 w-3.5" /> Analyze</Link>
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleReset}>
-            <RefreshCw className="h-3.5 w-3.5" /> Run again
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Events section ───────────────────────────────────────────────────────────
-
-type NewsEvent = {
-  id: string
-  title: string
-  summary: string | null
-  strategy: string | null
-  confidence: number
-  detectedAt: string
-}
-
-function EventsSection() {
-  const { activeCampaignId } = useCampaign()
-  const { data, isLoading } = useQuery({
-    queryKey: ['events', activeCampaignId],
-    queryFn: () => activeCampaignId ? api.getEvents(activeCampaignId, 5, 48) : Promise.resolve({ ok: true as const, events: [] }),
-    enabled: Boolean(activeCampaignId),
-    refetchInterval: 60_000,
-  })
-
-  const events = (data?.events ?? []) as NewsEvent[]
-
-  const STRATEGY: Record<string, { dot: string; badge: string }> = {
-    URGENT:     { dot: 'bg-red-500',            badge: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400' },
-    ENGAGEMENT: { dot: 'bg-emerald-500',         badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' },
-    DISCARD:    { dot: 'bg-muted-foreground/30', badge: 'bg-muted text-muted-foreground' },
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Newspaper className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold">Detected Events</h2>
-        </div>
-        <Link to="/analysis" className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
-          View all <ArrowRight className="h-3 w-3" />
-        </Link>
-      </div>
-
-      {isLoading && (
-        <div className="space-y-2">
-          {[1, 2, 3].map((i) => <div key={i} className="h-14 animate-pulse rounded-lg bg-muted" />)}
-        </div>
-      )}
-
-      {!isLoading && events.length === 0 && (
-        <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed py-8 text-center">
-          <Newspaper className="h-6 w-6 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">No events detected yet</p>
-          <p className="text-xs text-muted-foreground/70">Events appear after running a collection</p>
-        </div>
-      )}
-
-      {events.length > 0 && (
-        <div className="space-y-2">
-          {events.map((ev) => {
-            const s = ev.strategy && ev.strategy in STRATEGY ? STRATEGY[ev.strategy] : null
-            return (
-              <div key={ev.id} className="flex items-start gap-3 rounded-lg border bg-card px-3 py-2.5">
-                <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', s?.dot ?? 'bg-muted-foreground/30')} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-snug line-clamp-2">{ev.title}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{relativeDate(ev.detectedAt)}</p>
-                </div>
-                {ev.strategy && ev.strategy !== 'DISCARD' && s && (
-                  <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium', s.badge)}>
-                    {ev.strategy}
-                  </span>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Trending section ─────────────────────────────────────────────────────────
-
-function TrendingSection() {
-  const { activeCampaignId } = useCampaign()
-  const { data, isLoading } = useQuery({
-    queryKey: ['hashtags', '24h', activeCampaignId],
-    queryFn: () => activeCampaignId ? api.getHashtagLeaderboard(activeCampaignId, '24h', 8) : Promise.resolve({ ok: true as const, hashtags: [] }),
-    enabled: Boolean(activeCampaignId),
-    refetchInterval: 60_000,
-  })
-
-  const hashtags = data?.hashtags ?? []
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold">Trending · 24h</h2>
-        </div>
-        <Link to="/analysis" className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
-          Full view <ArrowRight className="h-3 w-3" />
-        </Link>
-      </div>
-
-      {isLoading && (
-        <div className="space-y-2">
-          {[1, 2, 3, 4, 5].map((i) => <div key={i} className="h-6 animate-pulse rounded-md bg-muted" />)}
-        </div>
-      )}
-
-      {!isLoading && hashtags.length === 0 && (
-        <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed py-8 text-center">
-          <BarChart3 className="h-6 w-6 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">No trending data yet</p>
-          <p className="text-xs text-muted-foreground/70">Run a collection to populate trends</p>
-        </div>
-      )}
-
-      {hashtags.length > 0 && (
-        <div className="space-y-2">
-          {hashtags.map((h, i) => {
-            const max = hashtags[0]?.score ?? 1
-            const pct = Math.round((h.score / max) * 100)
-            return (
-              <div key={h.hashtag} className="flex items-center gap-2">
-                <span className="w-4 shrink-0 text-right text-[10px] tabular-nums text-muted-foreground">{i + 1}</span>
-                <div className="flex-1 overflow-hidden rounded-full bg-muted h-1.5">
-                  <div
-                    className="h-full rounded-full bg-primary transition-all duration-700"
-                    style={{ width: `${pct}%`, transitionDelay: `${i * 50}ms` }}
-                  />
-                </div>
-                <span className="w-28 truncate font-mono text-xs text-foreground">#{h.hashtag}</span>
-                <span className="w-10 text-right text-xs tabular-nums text-muted-foreground">{h.score.toFixed(0)}</span>
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function HomePage() {
-  const { activeCampaign, campaigns, isLoading: campaignsLoading } = useCampaign()
+  const { activeCampaignId, activeCampaign } = useCampaign();
+  const qc = useQueryClient();
+  const [target, setTarget] = useState<'both' | 'hashtags' | 'profiles'>('both');
 
-  // Last run data
-  const { data: runsData } = useQuery({
-    queryKey: ['runs', activeCampaign?.id],
-    queryFn: () => activeCampaign ? api.listRuns(activeCampaign.id) : Promise.resolve({ ok: true as const, runs: [] }),
-    enabled: Boolean(activeCampaign),
-  })
+  const { data: lastRun } = useQuery({
+    queryKey: ['last-run', activeCampaignId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('collection_runs')
+        .select('*')
+        .eq('campaign_id', activeCampaignId!)
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .single();
+      return data as CollectionRun | null;
+    },
+    enabled: Boolean(activeCampaignId),
+    refetchInterval: (q) => q.state.data?.status === 'running' ? 2000 : false,
+  });
 
-  // Source counts
-  const { data: hashtagData } = useQuery({
-    queryKey: ['hashtags-tracked', activeCampaign?.id],
-    queryFn: () => activeCampaign ? api.getTrackedHashtags(activeCampaign.id) : Promise.resolve({ ok: true as const, hashtags: [] }),
-    enabled: Boolean(activeCampaign),
-  })
-  const { data: profileData } = useQuery({
-    queryKey: ['profiles-tracked', activeCampaign?.id],
-    queryFn: () => activeCampaign ? api.getProfiles(activeCampaign.id) : Promise.resolve({ ok: true as const, profiles: [] }),
-    enabled: Boolean(activeCampaign),
-  })
+  const { data: posts = [] } = useQuery({
+    queryKey: ['top-posts', activeCampaignId],
+    queryFn: async () => {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data } = await supabase
+        .from('scored_posts')
+        .select('id, author_handle, caption, likes, comments, views, trend_score, thumbnail_url, permalink, collected_at')
+        .eq('campaign_id', activeCampaignId!)
+        .gte('collected_at', since)
+        .order('trend_score', { ascending: false })
+        .limit(10);
+      return (data ?? []) as ScoredPost[];
+    },
+    enabled: Boolean(activeCampaignId),
+  });
 
-  if (campaignsLoading) {
+  const { data: hashtags = [] } = useQuery({
+    queryKey: ['top-hashtags', activeCampaignId],
+    queryFn: async () => {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data } = await supabase
+        .from('hashtag_snapshots')
+        .select('hashtag, trend_score')
+        .eq('campaign_id', activeCampaignId!)
+        .gte('snapshotted_at', since)
+        .order('trend_score', { ascending: false })
+        .limit(20);
+      const map = new Map<string, number>();
+      for (const s of data ?? []) {
+        if ((map.get(s.hashtag) ?? 0) < s.trend_score) map.set(s.hashtag, s.trend_score);
+      }
+      return [...map.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([hashtag, score], i) => ({ hashtag, score, rank: i + 1 }));
+    },
+    enabled: Boolean(activeCampaignId),
+  });
+
+  const collect = useMutation({
+    mutationFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/collect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ campaignId: activeCampaignId, target }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['last-run', activeCampaignId] });
+      qc.invalidateQueries({ queryKey: ['top-posts', activeCampaignId] });
+      qc.invalidateQueries({ queryKey: ['top-hashtags', activeCampaignId] });
+    },
+  });
+
+  const isRunning = lastRun?.status === 'running' || collect.isPending;
+
+  if (!activeCampaignId) {
     return (
-      <div className="space-y-4">
-        <div className="h-8 w-48 animate-pulse rounded-lg bg-muted" />
-        <div className="h-20 animate-pulse rounded-xl bg-muted" />
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <AlertCircle className="w-10 h-10 text-tertiary mb-4" />
+        <p className="text-title text-primary">No campaign selected</p>
+        <p className="text-caption mt-1">Create a campaign in Setup to get started.</p>
       </div>
-    )
+    );
   }
 
-  if (campaigns.length === 0) return <NoCampaignState />
-
-  const runs      = runsData?.runs ?? []
-  const lastRun   = runs[0] ?? null
-  const hashtags  = (hashtagData?.hashtags ?? []) as Array<{ active: boolean }>
-  const profiles  = (profileData?.profiles ?? []) as Array<{ active: boolean }>
-  const hasHashtags = hashtags.some((h) => h.active)
-  const hasProfiles = profiles.some((p) => p.active)
-  const hasSources  = hasHashtags || hasProfiles
-
   return (
-    <>
-      {/* Page header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Home</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            {activeCampaign
-              ? <span className="flex items-center gap-1.5">
-                  <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: activeCampaign.color }} />
-                  {activeCampaign.name}
-                </span>
-              : 'Select a campaign to get started'
-            }
-          </p>
+          <h1 className="text-title-xl">{activeCampaign?.name ?? 'Home'}</h1>
+          {activeCampaign?.description && (
+            <p className="text-caption mt-0.5">{activeCampaign.description}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={target}
+            onChange={(e) => setTarget(e.target.value as typeof target)}
+            className="h-9 rounded-md bg-[#E8E8ED] px-3 text-[13px] font-medium text-primary border-none focus:outline-none cursor-pointer"
+          >
+            <option value="both">All sources</option>
+            <option value="hashtags">Hashtags only</option>
+            <option value="profiles">Profiles only</option>
+          </select>
+          <Button onClick={() => collect.mutate()} disabled={isRunning} className="gap-2">
+            {isRunning ? (
+              <><div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />Collecting…</>
+            ) : (
+              <><Play className="w-4 h-4" />Collect Now</>
+            )}
+          </Button>
         </div>
       </div>
 
-      {/* No sources warning */}
-      {!hasSources && <NoSourcesBanner />}
+      {/* Last run */}
+      {lastRun && (
+        <div className={cn(
+          'flex items-center gap-3 px-4 py-3 rounded-lg text-[13px]',
+          lastRun.status === 'completed' && 'bg-[#F0FAF0] text-success',
+          lastRun.status === 'running'   && 'bg-accent/5 text-accent',
+          lastRun.status === 'failed'    && 'bg-destructive/5 text-destructive',
+          lastRun.status === 'partial'   && 'bg-warning/5 text-warning',
+        )}>
+          <Clock className="w-4 h-4 shrink-0" />
+          <span>
+            {lastRun.status === 'running'
+              ? 'Collection in progress…'
+              : `Last run ${relativeTime(lastRun.started_at)} — ${lastRun.posts_found ?? 0} posts found`}
+          </span>
+          <Badge
+            className="ml-auto"
+            variant={lastRun.status === 'completed' ? 'success' : lastRun.status === 'failed' ? 'destructive' : lastRun.status === 'running' ? 'default' : 'warning'}
+          >
+            {lastRun.status}
+          </Badge>
+        </div>
+      )}
 
-      {/* Collection panel */}
-      <CollectionSection
-        hasHashtags={hasHashtags}
-        hasProfiles={hasProfiles}
-        lastRun={lastRun}
-      />
+      {collect.error && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-destructive/5 text-destructive text-[13px]">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          {(collect.error as Error).message}
+        </div>
+      )}
 
-      {/* Data panels */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <EventsSection />
-        <TrendingSection />
+      {/* Content grid */}
+      <div className="grid grid-cols-[200px_1fr] gap-5">
+        {/* Trending hashtags */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-1.5">
+              <Hash className="w-3.5 h-3.5 text-accent" /> Trending
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 space-y-3">
+            {hashtags.length === 0 ? (
+              <p className="text-caption text-center py-4">No data yet</p>
+            ) : hashtags.map((h) => (
+              <div key={h.hashtag}>
+                <div className="flex justify-between mb-1">
+                  <span className="text-[12px] text-primary">#{h.hashtag}</span>
+                  <span className="text-2xs text-tertiary">#{h.rank}</span>
+                </div>
+                <ScoreBar score={h.score} />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        {/* Top posts */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-1.5">
+              <TrendingUp className="w-3.5 h-3.5 text-accent" /> Top Posts (24h)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {posts.length === 0 ? (
+              <p className="text-caption text-center py-8">No posts yet — click Collect Now to start.</p>
+            ) : (
+              <div>
+                {posts.map((post, i) => (
+                  <div key={post.id} className={cn(
+                    'flex items-start gap-3 py-3',
+                    i < posts.length - 1 && 'border-b border-border-subtle',
+                  )}>
+                    <span className="text-[12px] font-medium text-tertiary w-4 shrink-0 pt-0.5">{i + 1}</span>
+
+                    {post.thumbnail_url ? (
+                      <img src={post.thumbnail_url} alt="" className="w-9 h-9 rounded object-cover shrink-0 bg-[#E8E8ED]" />
+                    ) : (
+                      <div className="w-9 h-9 rounded bg-[#E8E8ED] shrink-0" />
+                    )}
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-[13px] font-medium truncate">
+                          {post.author_handle ? `@${post.author_handle}` : 'Unknown'}
+                        </span>
+                        <span className="text-caption shrink-0">{relativeTime(post.collected_at)}</span>
+                      </div>
+                      {post.caption && (
+                        <p className="text-[12px] text-secondary line-clamp-1">{post.caption}</p>
+                      )}
+                      <div className="flex gap-3 mt-1 text-[11px] text-tertiary">
+                        <span>♥ {formatNumber(post.likes)}</span>
+                        <span>💬 {formatNumber(post.comments)}</span>
+                        {post.views > 0 && <span>👁 {formatNumber(post.views)}</span>}
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className={cn(
+                        'text-[13px] font-semibold',
+                        post.trend_score >= 70 ? 'text-success' :
+                        post.trend_score >= 40 ? 'text-warning' : 'text-tertiary',
+                      )}>
+                        {post.trend_score.toFixed(0)}
+                      </span>
+                      {post.permalink && (
+                        <a href={post.permalink} target="_blank" rel="noopener noreferrer"
+                          className="block text-[11px] text-accent hover:underline">View
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
-    </>
-  )
+    </div>
+  );
 }

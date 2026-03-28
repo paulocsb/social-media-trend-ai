@@ -1,15 +1,15 @@
-import { Outlet } from 'react-router-dom'
-import { Sidebar } from './Sidebar'
+import { Outlet } from 'react-router-dom';
+import { Sidebar } from './Sidebar';
 
-export function AppLayout({ onLogout }: { onLogout: () => void }) {
+export function AppLayout() {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar onLogout={onLogout} />
+      <Sidebar />
       <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-7xl space-y-6 p-6">
+        <div className="max-w-5xl mx-auto px-8 py-8">
           <Outlet />
         </div>
       </main>
     </div>
-  )
+  );
 }

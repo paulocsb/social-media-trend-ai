@@ -1,65 +1,68 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  darkMode: ['class'],
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
+      fontFamily: {
+        sans: [
+          '-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'SF Pro Text',
+          'Inter', 'system-ui', 'sans-serif',
+        ],
+      },
       colors: {
-        border: 'hsl(var(--border))',
-        input: 'hsl(var(--input))',
-        ring: 'hsl(var(--ring))',
-        background: 'hsl(var(--background))',
-        foreground: 'hsl(var(--foreground))',
-        primary: {
-          DEFAULT: 'hsl(var(--primary))',
-          foreground: 'hsl(var(--primary-foreground))',
-        },
-        secondary: {
-          DEFAULT: 'hsl(var(--secondary))',
-          foreground: 'hsl(var(--secondary-foreground))',
-        },
-        destructive: {
-          DEFAULT: 'hsl(var(--destructive))',
-          foreground: 'hsl(var(--destructive-foreground))',
-        },
-        muted: {
-          DEFAULT: 'hsl(var(--muted))',
-          foreground: 'hsl(var(--muted-foreground))',
-        },
+        // Page & surface
+        background: '#F5F5F7',   // Apple's page background
+        surface: '#FFFFFF',       // Cards, panels
+        overlay: 'rgba(0,0,0,0.4)',
+
+        // Text
+        primary:   '#1D1D1F',     // Apple near-black
+        secondary: '#6E6E73',     // Apple medium gray
+        tertiary:  '#AEAEB2',     // Apple light gray
+
+        // Accent
         accent: {
-          DEFAULT: 'hsl(var(--accent))',
-          foreground: 'hsl(var(--accent-foreground))',
+          DEFAULT:  '#0071E3',    // Apple blue
+          hover:    '#0077ED',
+          light:    '#E8F0FE',
         },
-        card: {
-          DEFAULT: 'hsl(var(--card))',
-          foreground: 'hsl(var(--card-foreground))',
-        },
-        sidebar: {
-          DEFAULT: 'hsl(var(--sidebar))',
-          foreground: 'hsl(var(--sidebar-foreground))',
-          primary: 'hsl(var(--sidebar-primary))',
-          'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
-          accent: 'hsl(var(--sidebar-accent))',
-          'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
-        },
+
+        // Borders
+        border:     '#D2D2D7',
+        'border-subtle': '#E8E8ED',
+
+        // Semantic
+        success:     '#34C759',
+        warning:     '#FF9F0A',
+        destructive: '#FF3B30',
+        info:        '#30B0C7',
       },
       borderRadius: {
-        lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 2px)',
-        sm: 'calc(var(--radius) - 4px)',
+        DEFAULT: '10px',
+        sm:      '6px',
+        md:      '10px',
+        lg:      '14px',
+        xl:      '20px',
+        full:    '9999px',
+      },
+      boxShadow: {
+        card:   '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
+        panel:  '0 4px 16px rgba(0,0,0,0.08)',
+        modal:  '0 20px 60px rgba(0,0,0,0.16)',
+        subtle: '0 1px 2px rgba(0,0,0,0.05)',
+      },
+      fontSize: {
+        '2xs': ['10px', { lineHeight: '14px' }],
       },
       keyframes: {
-        'fade-in':  { from: { opacity: '0', transform: 'translateY(4px)' },  to: { opacity: '1', transform: 'translateY(0)' } },
-        'slide-in': { from: { opacity: '0', transform: 'translateX(-8px)' }, to: { opacity: '1', transform: 'translateX(0)' } },
-        'slide-up': { from: { opacity: '0', transform: 'translateY(16px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
-        'scale-in': { from: { opacity: '0', transform: 'scale(0.96)' },      to: { opacity: '1', transform: 'scale(1)' } },
-        'progress':  { from: { width: '0%' }, to: { width: '100%' } },
+        'fade-in':  { from: { opacity: '0', transform: 'translateY(4px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
+        'scale-in': { from: { opacity: '0', transform: 'scale(0.97)' },     to: { opacity: '1', transform: 'scale(1)' } },
+        'spin-slow': { to: { transform: 'rotate(360deg)' } },
       },
       animation: {
-        'fade-in':  'fade-in 0.2s ease-out',
-        'slide-in': 'slide-in 0.2s ease-out',
-        'slide-up': 'slide-up 0.3s ease-out',
-        'scale-in': 'scale-in 0.25s ease-out',
+        'fade-in':  'fade-in 0.18s ease-out',
+        'scale-in': 'scale-in 0.2s ease-out',
+        'spin-slow': 'spin-slow 1.4s linear infinite',
       },
     },
   },
