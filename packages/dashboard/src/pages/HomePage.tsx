@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Play, Hash, TrendingUp, Clock, AlertCircle } from 'lucide-react';
+import { Play, Hash, TrendingUp, Clock, AlertCircle, Bell, X, Eye } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useCampaign } from '../lib/campaign';
-import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { relativeTime, formatNumber, cn } from '../lib/utils';
@@ -17,7 +16,7 @@ function ScoreBar({ score }: { score: number }) {
   const color = pct >= 70 ? 'bg-success' : pct >= 40 ? 'bg-warning' : 'bg-tertiary';
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1 bg-[#E8E8ED] rounded-full overflow-hidden">
+      <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
         <div className={cn('h-full rounded-full transition-all', color)} style={{ width: `${pct}%` }} />
       </div>
       <span className="text-[12px] font-medium text-secondary w-7 text-right">{pct.toFixed(0)}</span>
@@ -25,10 +24,13 @@ function ScoreBar({ score }: { score: number }) {
   );
 }
 
+type TriggeredAlert = { hashtag: string; score: number; threshold: number };
+
 export function HomePage() {
   const { activeCampaignId, activeCampaign } = useCampaign();
   const qc = useQueryClient();
   const [target, setTarget] = useState<'both' | 'hashtags' | 'profiles'>('both');
+  const [triggeredAlerts, setTriggeredAlerts] = useState<TriggeredAlert[]>([]);
 
   const { data: lastRun } = useQuery({
     queryKey: ['last-run', activeCampaignId],
@@ -99,10 +101,13 @@ export function HomePage() {
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['last-run', activeCampaignId] });
       qc.invalidateQueries({ queryKey: ['top-posts', activeCampaignId] });
       qc.invalidateQueries({ queryKey: ['top-hashtags', activeCampaignId] });
+      if (data?.triggeredAlerts?.length) {
+        setTriggeredAlerts(data.triggeredAlerts);
+      }
     },
   });
 
@@ -120,62 +125,113 @@ export function HomePage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-title-xl">{activeCampaign?.name ?? 'Home'}</h1>
-          {activeCampaign?.description && (
-            <p className="text-caption mt-0.5">{activeCampaign.description}</p>
-          )}
+      {/* Page header — campaign title + collect controls */}
+      <div>
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="text-title-xl truncate">{activeCampaign?.name ?? '—'}</h1>
+          {/* Unified collect control */}
+          <div className="flex items-center glass rounded-full p-0.5 gap-0.5 shrink-0">
+            {([
+              { value: 'both',     label: 'All' },
+              { value: 'hashtags', label: 'Hashtags' },
+              { value: 'profiles', label: 'Profiles' },
+            ] as const).map(({ value, label }) => (
+              <button
+                key={value}
+                onClick={() => setTarget(value)}
+                className={cn(
+                  'px-3.5 py-1.5 rounded-full text-[13px] font-medium transition-all duration-150',
+                  target === value
+                    ? 'bg-white/[0.12] text-primary shadow-subtle'
+                    : 'text-secondary hover:text-primary',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+
+            <div className="w-px h-4 bg-white/[0.12] self-center mx-0.5 shrink-0" />
+
+            <button
+              onClick={() => collect.mutate()}
+              disabled={isRunning}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[13px] font-medium bg-accent text-white transition-all duration-150 hover:bg-accent/80 disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {isRunning ? (
+                <><div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />Collecting…</>
+              ) : (
+                <><Play className="w-3.5 h-3.5" />Collect Now</>
+              )}
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={target}
-            onChange={(e) => setTarget(e.target.value as typeof target)}
-            className="h-9 rounded-md bg-[#E8E8ED] px-3 text-[13px] font-medium text-primary border-none focus:outline-none cursor-pointer"
-          >
-            <option value="both">All sources</option>
-            <option value="hashtags">Hashtags only</option>
-            <option value="profiles">Profiles only</option>
-          </select>
-          <Button onClick={() => collect.mutate()} disabled={isRunning} className="gap-2">
-            {isRunning ? (
-              <><div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />Collecting…</>
-            ) : (
-              <><Play className="w-4 h-4" />Collect Now</>
+
+        {activeCampaign?.description && (
+          <p className="text-caption mt-1 truncate">{activeCampaign.description}</p>
+        )}
+        <p className="text-[12px] text-tertiary mt-1">
+          Fetches trending posts and hashtags from Instagram, scores them by engagement, and surfaces the top content for this campaign.
+        </p>
+
+        {/* Status bar — only shown when there's something to say */}
+        {(lastRun || collect.error) && (
+          <div className="mt-3 pt-3 border-t border-border-subtle">
+            {collect.error ? (
+              <div className="flex items-center gap-2 text-destructive text-[13px]">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                {(collect.error as Error).message}
+              </div>
+            ) : lastRun && (
+              <div className={cn(
+                'flex items-center gap-2.5 text-[13px]',
+                lastRun.status === 'completed' && 'text-success',
+                lastRun.status === 'running'   && 'text-accent',
+                lastRun.status === 'failed'    && 'text-destructive',
+                lastRun.status === 'partial'   && 'text-warning',
+              )}>
+                <Clock className="w-3.5 h-3.5 shrink-0" />
+                <span className="flex-1">
+                  {lastRun.status === 'running'
+                    ? 'Collection in progress…'
+                    : `Last run ${relativeTime(lastRun.started_at)} — ${lastRun.posts_found ?? 0} posts found`}
+                </span>
+                <Badge
+                  variant={lastRun.status === 'completed' ? 'success' : lastRun.status === 'failed' ? 'destructive' : lastRun.status === 'running' ? 'default' : 'warning'}
+                >
+                  {lastRun.status}
+                </Badge>
+              </div>
             )}
-          </Button>
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Last run */}
-      {lastRun && (
-        <div className={cn(
-          'flex items-center gap-3 px-4 py-3 rounded-lg text-[13px]',
-          lastRun.status === 'completed' && 'bg-[#F0FAF0] text-success',
-          lastRun.status === 'running'   && 'bg-accent/5 text-accent',
-          lastRun.status === 'failed'    && 'bg-destructive/5 text-destructive',
-          lastRun.status === 'partial'   && 'bg-warning/5 text-warning',
-        )}>
-          <Clock className="w-4 h-4 shrink-0" />
-          <span>
-            {lastRun.status === 'running'
-              ? 'Collection in progress…'
-              : `Last run ${relativeTime(lastRun.started_at)} — ${lastRun.posts_found ?? 0} posts found`}
-          </span>
-          <Badge
-            className="ml-auto"
-            variant={lastRun.status === 'completed' ? 'success' : lastRun.status === 'failed' ? 'destructive' : lastRun.status === 'running' ? 'default' : 'warning'}
-          >
-            {lastRun.status}
-          </Badge>
-        </div>
-      )}
-
-      {collect.error && (
-        <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-destructive/5 text-destructive text-[13px]">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          {(collect.error as Error).message}
+      {triggeredAlerts.length > 0 && (
+        <div className="rounded-xl bg-warning/10 border border-warning/25 px-4 py-3.5 animate-fade-in">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <Bell className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[13px] font-semibold text-warning mb-1.5">
+                  {triggeredAlerts.length === 1 ? '1 alert triggered' : `${triggeredAlerts.length} alerts triggered`}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {triggeredAlerts.map((a) => (
+                    <div key={a.hashtag} className="flex items-center gap-1.5 bg-warning/10 border border-warning/20 rounded-full px-3 py-0.5">
+                      <span className="text-[12px] font-medium text-warning">#{a.hashtag}</span>
+                      <span className="text-[11px] text-warning/70">score {a.score} ≥ {a.threshold}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setTriggeredAlerts([])}
+              className="p-1 rounded-md text-warning/60 hover:text-warning hover:bg-warning/10 transition-colors shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -223,9 +279,9 @@ export function HomePage() {
                     <span className="text-[12px] font-medium text-tertiary w-4 shrink-0 pt-0.5">{i + 1}</span>
 
                     {post.thumbnail_url ? (
-                      <img src={post.thumbnail_url} alt="" className="w-9 h-9 rounded object-cover shrink-0 bg-[#E8E8ED]" />
+                      <img src={post.thumbnail_url} alt="" className="w-9 h-9 rounded object-cover shrink-0 bg-white/10" />
                     ) : (
-                      <div className="w-9 h-9 rounded bg-[#E8E8ED] shrink-0" />
+                      <div className="w-9 h-9 rounded bg-white/10 shrink-0" />
                     )}
 
                     <div className="flex-1 min-w-0">
@@ -254,8 +310,13 @@ export function HomePage() {
                         {post.trend_score.toFixed(0)}
                       </span>
                       {post.permalink && (
-                        <a href={post.permalink} target="_blank" rel="noopener noreferrer"
-                          className="block text-[11px] text-accent hover:underline">View
+                        <a
+                          href={post.permalink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 p-1.5 rounded-full border bg-accent/[0.08] border-accent/[0.25] text-accent hover:bg-accent/[0.18] hover:border-accent/[0.45] active:scale-95 transition-all duration-150 flex items-center justify-center"
+                        >
+                          <Eye className="w-3 h-3" />
                         </a>
                       )}
                     </div>

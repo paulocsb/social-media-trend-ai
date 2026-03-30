@@ -118,6 +118,77 @@ function scorePost(post: NormalizedPost, velocityScore = 0): ScoredPost {
 }
 
 // ----------------------------------------------------------------
+// Dev fixtures (DEV_MODE=true — no Apify call, realistic mock data)
+// ----------------------------------------------------------------
+function devFixtures(hashtags: string[], handles: string[]): RawPost[] {
+  const now = Date.now();
+  const MEDIA_TYPES = ['IMAGE', 'REEL', 'CAROUSEL_ALBUM'];
+  const posts: RawPost[] = [];
+
+  // Generate posts per hashtag
+  hashtags.forEach((tag, hi) => {
+    for (let i = 0; i < 5; i++) {
+      const id = `dev_hashtag_${tag}_${i}`;
+      const likes = Math.floor(1_000 + Math.random() * 50_000);
+      const comments = Math.floor(likes * (0.02 + Math.random() * 0.08));
+      const views = Math.floor(likes * (3 + Math.random() * 10));
+      const ageMs = Math.floor(Math.random() * 48 * 60 * 60 * 1000); // up to 48 h old
+      posts.push({
+        id,
+        source: 'apify',
+        raw: {
+          id,
+          shortCode: `DEV${hi}${i}`,
+          type: MEDIA_TYPES[(hi + i) % MEDIA_TYPES.length],
+          caption: `Check out this amazing content! #${tag} #trending #instagram`,
+          hashtags: [tag, 'trending', 'instagram'],
+          likesCount: likes,
+          commentsCount: comments,
+          videoViewCount: views,
+          ownerUsername: `creator_${hi}_${i}`,
+          timestamp: new Date(now - ageMs).toISOString(),
+          displayUrl: `https://picsum.photos/seed/${id}/400/400`,
+          url: `https://www.instagram.com/p/DEV${hi}${i}/`,
+        },
+        collectedAt: new Date(),
+      });
+    }
+  });
+
+  // Generate posts per profile handle
+  handles.forEach((handle, hi) => {
+    for (let i = 0; i < 3; i++) {
+      const id = `dev_profile_${handle}_${i}`;
+      const likes = Math.floor(5_000 + Math.random() * 100_000);
+      const comments = Math.floor(likes * (0.01 + Math.random() * 0.05));
+      const views = Math.floor(likes * (2 + Math.random() * 8));
+      const ageMs = Math.floor(Math.random() * 72 * 60 * 60 * 1000);
+      posts.push({
+        id,
+        source: 'apify',
+        raw: {
+          id,
+          shortCode: `DEVP${hi}${i}`,
+          type: MEDIA_TYPES[i % MEDIA_TYPES.length],
+          caption: `New post from @${handle} — great vibes only ✨ #content #creator`,
+          hashtags: ['content', 'creator'],
+          likesCount: likes,
+          commentsCount: comments,
+          videoViewCount: views,
+          ownerUsername: handle,
+          timestamp: new Date(now - ageMs).toISOString(),
+          displayUrl: `https://picsum.photos/seed/${id}/400/400`,
+          url: `https://www.instagram.com/p/DEVP${hi}${i}/`,
+        },
+        collectedAt: new Date(),
+      });
+    }
+  });
+
+  return posts;
+}
+
+// ----------------------------------------------------------------
 // Apify adapters
 // ----------------------------------------------------------------
 async function collectHashtags(token: string, hashtags: string[], limit: number): Promise<RawPost[]> {
@@ -191,13 +262,17 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
 
+  const devMode = Deno.env.get('DEV_MODE') === 'true';
   const apifyToken = Deno.env.get('APIFY_TOKEN');
-  if (!apifyToken) {
+
+  if (!devMode && !apifyToken) {
     return new Response(JSON.stringify({ ok: false, error: 'APIFY_TOKEN not configured' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
+
+  let runId: string | null = null;
 
   try {
     const { campaignId, target = 'both', limit = 50 } = await req.json() as {
@@ -221,6 +296,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (runErr) throw runErr;
+    runId = run.id;
 
     // Fetch tracked sources
     const [{ data: hashtagRows }, { data: profileRows }] = await Promise.all([
@@ -231,13 +307,21 @@ Deno.serve(async (req) => {
     const hashtags = (hashtagRows ?? []).map((r) => r.hashtag);
     const handles = (profileRows ?? []).map((r) => r.handle);
 
-    // Collect raw posts
+    // Collect raw posts — use fixtures in DEV_MODE, Apify in production
     const rawPosts: RawPost[] = [];
-    if ((target === 'hashtags' || target === 'both') && hashtags.length > 0) {
-      rawPosts.push(...await collectHashtags(apifyToken, hashtags, limit));
-    }
-    if ((target === 'profiles' || target === 'both') && handles.length > 0) {
-      rawPosts.push(...await collectProfiles(apifyToken, handles, limit));
+    if (devMode) {
+      console.log('[collect] DEV_MODE — using fixture data, skipping Apify');
+      rawPosts.push(...devFixtures(
+        target !== 'profiles' ? hashtags : [],
+        target !== 'hashtags' ? handles : [],
+      ));
+    } else {
+      if ((target === 'hashtags' || target === 'both') && hashtags.length > 0) {
+        rawPosts.push(...await collectHashtags(apifyToken!, hashtags, limit));
+      }
+      if ((target === 'profiles' || target === 'both') && handles.length > 0) {
+        rawPosts.push(...await collectProfiles(apifyToken!, handles, limit));
+      }
     }
 
     // Normalize and score
@@ -249,6 +333,7 @@ Deno.serve(async (req) => {
       const rows = scored.map((p) => ({
         id: p.id,
         campaign_id: campaignId,
+        run_id: runId,
         source: p.source,
         hashtags: p.hashtags,
         media_type: p.mediaType,
@@ -310,12 +395,42 @@ Deno.serve(async (req) => {
       .select()
       .single();
 
-    return new Response(JSON.stringify({ ok: true, run: updatedRun, postsFound: scored.length }), {
+    // Evaluate alerts against this run's hashtag scores
+    const triggeredAlerts: Array<{ hashtag: string; score: number; threshold: number }> = [];
+    const { data: activeAlerts } = await supabase
+      .from('alerts')
+      .select('hashtag, threshold')
+      .eq('campaign_id', campaignId)
+      .eq('active', true);
+
+    for (const alert of activeAlerts ?? []) {
+      const entry = hashtagScoreMap.get(alert.hashtag.toLowerCase());
+      if (entry) {
+        const score = Math.round(entry.total / entry.count);
+        if (score >= alert.threshold) {
+          triggeredAlerts.push({ hashtag: alert.hashtag, score, threshold: alert.threshold });
+        }
+      }
+    }
+
+    return new Response(JSON.stringify({ ok: true, run: updatedRun, postsFound: scored.length, triggeredAlerts }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('[collect]', message);
+    const message = err instanceof Error
+      ? err.message
+      : (typeof err === 'object' && err !== null && 'message' in err)
+        ? (err as { message: string }).message
+        : JSON.stringify(err);
+    console.error('[collect] error:', err);
+
+    if (runId) {
+      await supabase
+        .from('collection_runs')
+        .update({ status: 'failed', finished_at: new Date().toISOString(), error_message: message })
+        .eq('id', runId);
+    }
+
     return new Response(JSON.stringify({ ok: false, error: message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

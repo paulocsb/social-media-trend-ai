@@ -1,6 +1,6 @@
 # Instagram Trend Intelligence Platform
 
-Real-time Instagram trend monitoring. Collects posts from hashtags and accounts, calculates trend scores, and surfaces AI-driven content recommendations through a minimal React dashboard.
+Real-time Instagram trend monitoring. Collects posts from hashtags and accounts, scores them, and surfaces AI-driven content recommendations through a minimal React dashboard.
 
 ---
 
@@ -9,9 +9,10 @@ Real-time Instagram trend monitoring. Collects posts from hashtags and accounts,
 | Layer | Technology |
 |---|---|
 | Frontend | React 18 · Vite · Tailwind CSS |
-| Backend | Supabase (PostgreSQL · Auth · Realtime) |
+| Backend | Supabase (PostgreSQL · Auth · Realtime · Edge Functions) |
 | Edge Functions | Deno (Supabase) |
-| Data source | Apify Instagram scrapers |
+| Data source | Apify Instagram scrapers (or local fixtures via `DEV_MODE`) |
+| AI providers | Anthropic Claude · OpenAI GPT-4o · Ollama (any) |
 | Language | TypeScript |
 
 ---
@@ -20,12 +21,16 @@ Real-time Instagram trend monitoring. Collects posts from hashtags and accounts,
 
 ```
 Browser (React dashboard)
-  ↓  auth + direct DB queries
-Supabase (cloud)
+  ↓  auth + direct DB queries (supabase-js)
+Supabase (PostgreSQL + Auth + Realtime)
   ↓  on "Collect Now"
-Edge Function: collect
-  ↓  fetch → normalize → score → insert
+Edge Function: collect  (Deno)
+  ↓  DEV_MODE=true → fixture data  |  production → Apify
 Apify Instagram API
+  ↓  normalize → score → upsert
+scored_posts, hashtag_snapshots
+  ↓  Supabase Realtime
+Browser updates live
 ```
 
 No background jobs. No queues. No cron. Collection is always manual.
@@ -37,10 +42,10 @@ No background jobs. No queues. No cron. Collection is always manual.
 | Package | Purpose |
 |---|---|
 | `packages/shared` | TypeScript types, Zod schemas, Supabase DB types |
-| `packages/dashboard` | React SPA — 6 pages |
-| `supabase/migrations/` | Single consolidated SQL migration |
-| `supabase/functions/collect` | Manual collection trigger |
-| `supabase/functions/analysis` | AI prompt builder + submit |
+| `packages/dashboard` | React SPA — 6 pages + full auth flow |
+| `supabase/migrations/` | Schema, RLS, Realtime, default-campaign trigger |
+| `supabase/functions/collect` | Manual collection — Apify or fixture data |
+| `supabase/functions/analysis` | AI analysis pipeline + content generation |
 | `supabase/functions/alerts` | Threshold evaluation |
 
 ---
@@ -51,9 +56,8 @@ No background jobs. No queues. No cron. Collection is always manual.
 
 - [Node.js 20+](https://nodejs.org)
 - [pnpm 9+](https://pnpm.io) — `npm install -g pnpm`
-- A [Supabase](https://supabase.com) project (free tier works)
-
-No Docker required.
+- [Docker Desktop](https://docs.docker.com/desktop/) — required for `supabase functions serve`
+- [Supabase CLI](https://supabase.com/docs/guides/cli) — `npm install -g supabase`
 
 ### 1. Install dependencies
 
@@ -61,58 +65,99 @@ No Docker required.
 pnpm install
 ```
 
-### 2. Configure environment
-
-Create `packages/dashboard/.env`:
+### 2. Start local Supabase
 
 ```bash
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
+supabase start
 ```
 
-Both values are in your Supabase dashboard → **Settings → API**.
+Note the **Project URL**, **Publishable key**, and **Secret key** printed on first run.
 
-### 3. Run the dashboard
+### 3. Configure environment
+
+**Dashboard** — create `packages/dashboard/.env.local`:
+```bash
+VITE_SUPABASE_URL=http://127.0.0.1:54321
+VITE_SUPABASE_ANON_KEY=<publishable key from supabase start>
+```
+
+**Edge Functions** — create `supabase/functions/.env.local`:
+```bash
+DEV_MODE=true
+# Optional: add an AI provider key to enable auto-analysis
+# ANTHROPIC_API_KEY=sk-ant-...
+# OPENAI_API_KEY=sk-...
+# OLLAMA_URL=http://host.docker.internal:11434
+```
+
+> `DEV_MODE=true` skips Apify and uses realistic fixture data. No Apify token needed for local dev.
+
+### 4. Apply the schema
 
 ```bash
+supabase link --project-ref <your-project-ref>
+supabase db push
+```
+
+### 5. Run everything
+
+```bash
+# Terminal 1 — Edge Functions
+supabase functions serve --env-file supabase/functions/.env.local
+
+# Terminal 2 — Dashboard
 pnpm --filter @trend/dashboard dev
+# → http://localhost:5173
 ```
 
-Opens at `http://localhost:5173`. The dashboard talks directly to your Supabase cloud project — nothing else to start.
+Sign up for an account — a default campaign is created automatically.
 
 ---
 
-## Supabase Setup (one-time)
+## Production Setup
 
-### 1. Apply the schema
+### 1. Apply schema to remote
 
 ```bash
-npx supabase login
-npx supabase db push
+supabase link --project-ref <your-project-ref>
+supabase db push
 ```
 
-### 2. Create a user
+### 2. Set secrets
 
-In your Supabase dashboard → **Authentication → Users → Add user**.
+```bash
+supabase secrets set APIFY_TOKEN=your_apify_token
+
+# At least one AI provider to enable auto-analysis (optional)
+supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+# or
+supabase secrets set OPENAI_API_KEY=sk-...
+```
 
 ### 3. Deploy Edge Functions
 
 ```bash
-npx supabase secrets set APIFY_TOKEN=your_apify_token
-npx supabase functions deploy collect
-npx supabase functions deploy analysis
-npx supabase functions deploy alerts
+supabase functions deploy collect
+supabase functions deploy analysis
+supabase functions deploy alerts
 ```
+
+### 4. Deploy the dashboard
+
+Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in your hosting provider (Vercel, Netlify, etc.) then deploy `packages/dashboard`.
 
 ---
 
 ## App Flow
 
-1. **Setup** (`/setup`) — Create a campaign, add hashtags and/or profiles to track
-2. **Home** (`/`) — Click **Collect Now** to fetch posts from Apify, score them, and save to DB
-3. **Analysis** (`/analysis`) — Generate a prompt from recent data → paste into ChatGPT/Claude → submit the JSON response
-4. **History** (`/history`) — View past collection runs and AI analyses
-5. **Settings** (`/settings`) — Configure trend score alerts per hashtag
+1. **Sign up** — account created, default campaign provisioned automatically
+2. **Setup** (`/setup`) — the active campaign is the scope; add/edit hashtags and profiles via modal dialogs
+3. **Home** (`/`) — click **Collect Now** to fetch and score posts
+4. **Analysis** (`/analysis`)
+   - *With AI provider:* one click — prompt built, AI called, caption + hashtags generated automatically
+   - *Without AI provider:* copy the generated prompt into ChatGPT/Claude, paste the JSON response back
+5. **History** (`/history`) — past collection runs and analyses
+6. **Settings** (`/settings`) — configure trend score alerts per hashtag
 
 ---
 
@@ -121,11 +166,22 @@ npx supabase functions deploy alerts
 Each post is scored 0–100:
 
 ```
-score = velocity  × 40%
-      + engagement rate    × 30%
+score = velocity          × 40%
+      + engagement rate   × 30%
       + absolute engagement × 20%
-      + recency boost      × 10%  (decays to 0 at 6h)
+      + recency boost     × 10%  (linear decay → 0 at 6h)
 ```
+
+---
+
+## Environment Files
+
+| File | Committed | Purpose |
+|---|---|---|
+| `packages/dashboard/.env` | ✅ | Remote defaults |
+| `packages/dashboard/.env.local` | ❌ gitignored | Local overrides (Vite loads automatically) |
+| `supabase/functions/.env` | ✅ | Remote defaults |
+| `supabase/functions/.env.local` | ❌ gitignored | Local overrides — pass with `--env-file` |
 
 ---
 
@@ -133,9 +189,10 @@ score = velocity  × 40%
 
 | Route | Page |
 |---|---|
+| `/login` `/signup` `/forgot-password` `/reset-password` | Auth |
 | `/` | Home — collect + trending |
-| `/analysis` | AI analysis workflow |
+| `/analysis` | AI analysis + content generation |
 | `/history` | Past runs and analyses |
-| `/setup?tab=` | Campaigns · Hashtags · Profiles |
+| `/setup` | Campaigns · Hashtags · Profiles |
 | `/settings` | Alerts |
 | `/account` | Email and password |

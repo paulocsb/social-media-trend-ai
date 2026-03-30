@@ -111,7 +111,9 @@ export function SignUpPage() {
         </Button>
       </form>
 
-      <OAuthButtons label="Or sign up with" />
+      <div className="mt-5">
+        <OAuthButtons label="Or sign up with" />
+      </div>
 
       <div className="mt-4 text-center">
         <p className="text-[13px] text-secondary">

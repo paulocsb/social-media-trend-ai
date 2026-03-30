@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { Button } from '../components/ui/button';
@@ -6,11 +6,20 @@ import { Input } from '../components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 
 export function ContaPage() {
+  const [currentEmail, setCurrentEmail] = useState('');
   const [email, setEmail] = useState('');
   const [currentPw, setCurrentPw] = useState('');
   const [newPw, setNewPw] = useState('');
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    setSuccess('');
+    setError('');
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user?.email) setCurrentEmail(user.email);
+    });
+  }, []);
 
   const updateEmail = useMutation({
     mutationFn: async () => {
@@ -40,7 +49,7 @@ export function ContaPage() {
       <h1 className="text-title-xl">Account</h1>
 
       {success && (
-        <div className="px-4 py-3 rounded-lg bg-[#F0FAF0] text-success text-[13px]">{success}</div>
+        <div className="px-4 py-3 rounded-lg bg-success/10 border border-success/20 text-success text-[13px]">{success}</div>
       )}
       {error && (
         <div className="px-4 py-3 rounded-lg bg-destructive/5 text-destructive text-[13px]">{error}</div>
@@ -50,6 +59,11 @@ export function ContaPage() {
       <Card>
         <CardHeader><CardTitle>Email Address</CardTitle></CardHeader>
         <CardContent className="space-y-3">
+          {currentEmail && (
+            <p className="text-[13px] text-secondary">
+              Current: <span className="text-primary font-medium">{currentEmail}</span>
+            </p>
+          )}
           <Input
             type="email"
             placeholder="New email address"

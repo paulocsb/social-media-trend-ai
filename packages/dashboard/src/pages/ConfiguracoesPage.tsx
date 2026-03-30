@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2, Bell } from 'lucide-react';
+import { IconButton } from '../components/ui/icon-button';
 import { supabase } from '../lib/supabase';
 import { useCampaign } from '../lib/campaign';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
-import { relativeTime } from '../lib/utils';
+import { relativeTime, cn } from '../lib/utils';
 
 export function ConfiguracoesPage() {
   const { activeCampaignId } = useCampaign();
@@ -111,8 +112,8 @@ export function ConfiguracoesPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border-subtle">
-                  {['Hashtag', 'Threshold', 'Active', 'Created', ''].map((h) => (
-                    <th key={h} className="text-left text-label px-5 py-3">{h}</th>
+                  {['Hashtag', 'Threshold', 'Active', 'Created', ''].map((h, i, arr) => (
+                    <th key={h} className={cn('text-label px-5 py-3', i === arr.length - 1 ? 'text-right' : 'text-left')}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -124,16 +125,19 @@ export function ConfiguracoesPage() {
                     <td className="px-5 py-3">
                       <button
                         onClick={() => toggleAlert.mutate({ id: alert.id, active: !alert.active })}
-                        className={`w-8 h-4 rounded-full transition-colors ${alert.active ? 'bg-accent' : 'bg-[#D2D2D7]'}`}
+                        className={`w-8 h-4 rounded-full transition-colors ${alert.active ? 'bg-accent' : 'bg-white/20'}`}
                       >
                         <span className={`block w-3 h-3 rounded-full bg-white shadow mx-0.5 transition-transform ${alert.active ? 'translate-x-4' : ''}`} />
                       </button>
                     </td>
                     <td className="px-5 py-3 text-caption">{relativeTime(alert.created_at)}</td>
-                    <td className="px-5 py-3">
-                      <button onClick={() => deleteAlert.mutate(alert.id)} className="text-tertiary hover:text-destructive transition-colors">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    <td className="px-5 py-3 text-right">
+                      <IconButton
+                        icon={Trash2}
+                        variant="destructive"
+                        onClick={() => deleteAlert.mutate(alert.id)}
+                        className="ml-auto"
+                      />
                     </td>
                   </tr>
                 ))}

@@ -67,7 +67,9 @@ export function LoginPage() {
         </Button>
       </form>
 
-      <OAuthButtons />
+      <div className="mt-5">
+        <OAuthButtons />
+      </div>
 
       <div className="mt-4 text-center">
         <p className="text-[13px] text-secondary">

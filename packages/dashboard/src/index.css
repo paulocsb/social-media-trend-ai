@@ -22,7 +22,7 @@
   ::-webkit-scrollbar-thumb:hover { @apply bg-tertiary; }
 
   :focus-visible {
-    outline: 2px solid #0071E3;
+    outline: 2px solid #8B5CF6;
     outline-offset: 2px;
     border-radius: 6px;
   }
@@ -37,6 +37,32 @@
   .text-caption  { @apply text-[12px] text-secondary; }
   .text-label    { @apply text-[11px] font-medium uppercase tracking-wider text-tertiary; }
 
-  .card          { @apply bg-surface rounded-lg shadow-card; }
-  .divider       { @apply border-t border-border-subtle; }
+  /* Glass morphism card */
+  .glass {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  /* Slightly elevated glass surface */
+  .glass-raised {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  /* Sidebar glass */
+  .glass-sidebar {
+    background: rgba(15, 15, 35, 0.8);
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+  }
+
+  .card    { @apply glass rounded-xl; }
+  .divider { @apply border-t border-border-subtle; }
 }

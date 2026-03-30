@@ -22,7 +22,7 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="flex flex-col w-[220px] min-h-screen bg-surface border-r border-border-subtle shrink-0">
+    <aside className="flex flex-col w-[220px] min-h-screen glass-sidebar shrink-0">
       {/* Logo */}
       <div className="h-14 flex items-center px-5 border-b border-border-subtle">
         <span className="text-[15px] font-semibold text-primary tracking-tight">Trend Intel</span>
@@ -36,8 +36,8 @@ export function Sidebar() {
               value={activeCampaign?.id ?? ''}
               onChange={(e) => setActiveCampaignId(e.target.value)}
               className={cn(
-                'w-full appearance-none rounded-md bg-background px-3 pr-7 py-2',
-                'text-[13px] font-medium text-primary border border-transparent',
+                'w-full appearance-none rounded-md bg-white/5 px-3 pr-7 py-2',
+                'text-[13px] font-medium text-primary border border-border-subtle',
                 'hover:border-border transition-colors cursor-pointer',
                 'focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30',
               )}
@@ -65,8 +65,8 @@ export function Sidebar() {
               cn(
                 'flex items-center gap-2.5 px-3 py-2 rounded-md text-[14px] transition-colors',
                 isActive
-                  ? 'bg-accent/10 text-accent font-medium'
-                  : 'text-secondary hover:bg-background hover:text-primary',
+                  ? 'bg-accent/15 text-accent font-medium shadow-glow-sm'
+                  : 'text-secondary hover:bg-white/5 hover:text-primary',
               )
             }
           >
@@ -84,8 +84,8 @@ export function Sidebar() {
             cn(
               'flex items-center gap-2.5 px-3 py-2 rounded-md text-[14px] transition-colors',
               isActive
-                ? 'bg-accent/10 text-accent font-medium'
-                : 'text-secondary hover:bg-background hover:text-primary',
+                ? 'bg-accent/15 text-accent font-medium'
+                : 'text-secondary hover:bg-white/5 hover:text-primary',
             )
           }
         >
@@ -94,7 +94,7 @@ export function Sidebar() {
         </NavLink>
         <button
           onClick={handleSignOut}
-          className="flex w-full items-center gap-2.5 px-3 py-2 rounded-md text-[14px] text-secondary hover:bg-background hover:text-destructive transition-colors"
+          className="flex w-full items-center gap-2.5 px-3 py-2 rounded-md text-[14px] text-secondary hover:bg-white/5 hover:text-destructive transition-colors"
         >
           <LogOut className="w-4 h-4 shrink-0" />
           Sign out

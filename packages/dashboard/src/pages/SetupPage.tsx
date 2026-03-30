@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, Hash, User, Megaphone, X } from 'lucide-react';
+import { Plus, Trash2, Hash, User, Megaphone, X, Check, AlertTriangle, Pencil } from 'lucide-react';
+import { IconButton } from '../components/ui/icon-button';
 import { supabase } from '../lib/supabase';
 import { useCampaign, type Campaign } from '../lib/campaign';
 import { Button } from '../components/ui/button';
@@ -9,278 +9,524 @@ import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { cn } from '../lib/utils';
-import type { Tables } from '@trend/shared';
 
-type Tab = 'campaigns' | 'hashtags' | 'profiles';
+const COLORS = ['#8B5CF6','#6366f1','#3B82F6','#10B981','#F59E0B','#EF4444','#EC4899','#06B6D4'];
 
-const TABS: { id: Tab; label: string; icon: typeof Hash }[] = [
-  { id: 'campaigns', label: 'Campaigns', icon: Megaphone },
-  { id: 'hashtags',  label: 'Hashtags',  icon: Hash },
-  { id: 'profiles',  label: 'Profiles',  icon: User },
-];
-
-const COLORS = ['#6366f1','#0071E3','#34C759','#FF9F0A','#FF3B30','#AF52DE','#FF2D55','#5AC8FA'];
-
-// ----- Campaign tab -----
-function CampaignsTab() {
-  const { campaigns, activeCampaignId, setActiveCampaignId } = useCampaign();
-  const qc = useQueryClient();
-  const { data: { user } } = useQuery({ queryKey: ['user'], queryFn: () => supabase.auth.getUser() }).data ?? { data: { user: null } };
-
-  const [form, setForm] = useState({ name: '', description: '', color: COLORS[0] });
-  const [editId, setEditId] = useState<string | null>(null);
-
-  const save = useMutation({
-    mutationFn: async () => {
-      if (!user) throw new Error('Not signed in');
-      if (editId) {
-        await supabase.from('campaigns').update({ name: form.name, description: form.description || null, color: form.color }).eq('id', editId);
-      } else {
-        await supabase.from('campaigns').insert({ user_id: user.id, name: form.name, description: form.description || null, color: form.color });
-      }
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['campaigns'] });
-      setForm({ name: '', description: '', color: COLORS[0] });
-      setEditId(null);
-    },
-  });
-
-  const del = useMutation({
-    mutationFn: (id: string) => supabase.from('campaigns').delete().eq('id', id).then(({ error }) => { if (error) throw error; }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['campaigns'] }),
-  });
-
-  function startEdit(c: Campaign) {
-    setEditId(c.id);
-    setForm({ name: c.name, description: c.description ?? '', color: c.color });
-  }
-
+// ----------------------------------------------------------------
+// Shared modal shell
+// ----------------------------------------------------------------
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="space-y-5">
-      {/* Form */}
-      <Card>
-        <CardHeader><CardTitle>{editId ? 'Edit Campaign' : 'New Campaign'}</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <Input placeholder="Campaign name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <Input placeholder="Description (optional)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-          <div className="flex gap-2">
-            {COLORS.map((c) => (
-              <button
-                key={c}
-                onClick={() => setForm({ ...form, color: c })}
-                className={cn('w-6 h-6 rounded-full transition-transform', form.color === c && 'ring-2 ring-offset-2 ring-accent scale-110')}
-                style={{ background: c }}
-              />
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={() => save.mutate()} disabled={!form.name.trim() || save.isPending}>
-              {editId ? 'Update' : 'Create'}
-            </Button>
-            {editId && <Button variant="secondary" onClick={() => { setEditId(null); setForm({ name: '', description: '', color: COLORS[0] }); }}>Cancel</Button>}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* List */}
-      <div className="space-y-2">
-        {campaigns.map((c) => (
-          <div key={c.id} className={cn('flex items-center gap-3 px-4 py-3 rounded-lg bg-surface shadow-card')}>
-            <div className="w-3 h-3 rounded-full shrink-0" style={{ background: c.color }} />
-            <div className="flex-1 min-w-0">
-              <p className="text-[14px] font-medium">{c.name}</p>
-              {c.description && <p className="text-caption">{c.description}</p>}
-            </div>
-            {activeCampaignId === c.id ? (
-              <Badge variant="default">Active</Badge>
-            ) : (
-              <Button variant="secondary" size="sm" onClick={() => setActiveCampaignId(c.id)}>Select</Button>
-            )}
-            <button onClick={() => startEdit(c)} className="text-secondary hover:text-primary transition-colors">
-              <span className="text-[13px]">Edit</span>
-            </button>
-            <button onClick={() => del.mutate(c.id)} className="text-secondary hover:text-destructive transition-colors">
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
-        ))}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.7)' }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="glass-raised rounded-2xl w-full max-w-sm shadow-modal animate-scale-in">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border-subtle">
+          <p className="text-[15px] font-semibold text-primary">{title}</p>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-full border bg-white/5 border-white/8 text-tertiary hover:bg-white/12 hover:border-white/14 hover:text-primary active:scale-95 transition-all duration-150"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="px-6 py-5">{children}</div>
       </div>
     </div>
   );
 }
 
-// ----- Hashtags tab -----
-function HashtagsTab() {
-  const { activeCampaignId } = useCampaign();
+// ----------------------------------------------------------------
+// Campaign modal (create / edit)
+// ----------------------------------------------------------------
+function CampaignModal({
+  initial,
+  onClose,
+}: {
+  initial?: Campaign;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    name: initial?.name ?? '',
+    description: initial?.description ?? '',
+    color: initial?.color ?? COLORS[0],
+  });
+
+  const save = useMutation({
+    mutationFn: async () => {
+      if (initial) {
+        const { error } = await supabase
+          .from('campaigns')
+          .update({ name: form.name, description: form.description || null, color: form.color })
+          .eq('id', initial.id);
+        if (error) throw error;
+      } else {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not signed in');
+        const { error } = await supabase
+          .from('campaigns')
+          .insert({ user_id: user.id, name: form.name, description: form.description || null, color: form.color });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['campaigns'] });
+      onClose();
+    },
+  });
+
+  return (
+    <Modal title={initial ? 'Edit Campaign' : 'New Campaign'} onClose={onClose}>
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <label className="text-label">Name</label>
+          <Input
+            placeholder="e.g. Summer Launch"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            autoFocus
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-label">Description <span className="normal-case font-normal text-tertiary">(optional)</span></label>
+          <Input
+            placeholder="What is this campaign about?"
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-label">Color</label>
+          <div className="flex gap-2">
+            {COLORS.map((c) => (
+              <button
+                key={c}
+                onClick={() => setForm({ ...form, color: c })}
+                className="relative w-6 h-6 rounded-full transition-transform hover:scale-110"
+                style={{ background: c }}
+              >
+                {form.color === c && (
+                  <Check className="absolute inset-0 m-auto w-3 h-3 text-white" strokeWidth={3} />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {save.isError && (
+          <p className="text-[12px] text-destructive">{(save.error as Error).message}</p>
+        )}
+
+        <div className="flex gap-2 pt-1">
+          <Button
+            onClick={() => save.mutate()}
+            disabled={!form.name.trim() || save.isPending}
+            className="flex-1"
+          >
+            {save.isPending ? 'Saving…' : initial ? 'Update' : 'Create'}
+          </Button>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ----------------------------------------------------------------
+// Add items modal (hashtags or profiles)
+// ----------------------------------------------------------------
+function AddItemModal({
+  type,
+  campaignId,
+  onClose,
+}: {
+  type: 'hashtag' | 'profile';
+  campaignId: string;
+  onClose: () => void;
+}) {
   const qc = useQueryClient();
   const [input, setInput] = useState('');
+  const isHashtag = type === 'hashtag';
 
-  const { data: rows = [] } = useQuery({
+  const add = useMutation({
+    mutationFn: async () => {
+      const items = input.split(/[\s,]+/).filter(Boolean);
+      if (!items.length) return;
+
+      if (isHashtag) {
+        const rows = items.map((t) => ({
+          campaign_id: campaignId,
+          hashtag: t.replace(/^#+/, '').toLowerCase(),
+        }));
+        const { error } = await supabase.from('tracked_hashtags').insert(rows);
+        if (error) throw error;
+      } else {
+        const rows = items.map((h) => ({
+          campaign_id: campaignId,
+          handle: h.replace(/^@/, '').toLowerCase(),
+        }));
+        const { error } = await supabase.from('tracked_profiles').insert(rows);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [isHashtag ? 'hashtags' : 'profiles', campaignId] });
+      onClose();
+    },
+  });
+
+  function handleKey(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') add.mutate();
+  }
+
+  return (
+    <Modal title={isHashtag ? 'Add Hashtags' : 'Add Profiles'} onClose={onClose}>
+      <div className="space-y-4">
+        <p className="text-[13px] text-secondary">
+          {isHashtag
+            ? 'Enter one or more hashtags separated by commas or spaces. The # is optional.'
+            : 'Enter one or more handles separated by commas or spaces. The @ is optional.'}
+        </p>
+        <Input
+          placeholder={isHashtag ? '#marketing, #socialmedia' : '@nike, @adidas'}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKey}
+          autoFocus
+        />
+        {add.isError && (
+          <p className="text-[12px] text-destructive">{(add.error as Error).message}</p>
+        )}
+        <div className="flex gap-2">
+          <Button
+            onClick={() => add.mutate()}
+            disabled={!input.trim() || add.isPending}
+            className="flex-1"
+          >
+            {add.isPending ? 'Adding…' : 'Add'}
+          </Button>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ----------------------------------------------------------------
+// Delete campaign confirmation
+// ----------------------------------------------------------------
+function DeleteCampaignModal({ campaign, onClose }: { campaign: Campaign; onClose: () => void }) {
+  const qc = useQueryClient();
+  const { setActiveCampaignId, campaigns, activeCampaignId } = useCampaign();
+
+  const del = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('campaigns').delete().eq('id', campaign.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      if (activeCampaignId === campaign.id) {
+        const next = campaigns.find((c) => c.id !== campaign.id);
+        setActiveCampaignId(next?.id ?? null);
+      }
+      qc.invalidateQueries({ queryKey: ['campaigns'] });
+      onClose();
+    },
+  });
+
+  return (
+    <Modal title="Delete Campaign?" onClose={onClose}>
+      <div className="space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl bg-destructive/15 flex items-center justify-center shrink-0 mt-0.5">
+            <AlertTriangle className="w-4 h-4 text-destructive" />
+          </div>
+          <p className="text-[13px] text-secondary leading-relaxed">
+            <span className="font-medium text-primary">"{campaign.name}"</span> and all its tracked hashtags, profiles, posts, and analyses will be permanently deleted.
+          </p>
+        </div>
+        {del.isError && (
+          <p className="text-[12px] text-destructive">{(del.error as Error).message}</p>
+        )}
+        <div className="flex gap-2">
+          <Button variant="destructive" onClick={() => del.mutate()} disabled={del.isPending} className="flex-1">
+            {del.isPending ? 'Deleting…' : 'Delete'}
+          </Button>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ----------------------------------------------------------------
+// Page
+// ----------------------------------------------------------------
+type ModalState =
+  | { type: 'new-campaign' }
+  | { type: 'edit-campaign'; campaign: Campaign }
+  | { type: 'delete-campaign'; campaign: Campaign }
+  | { type: 'add-hashtag' }
+  | { type: 'add-profile' };
+
+export function SetupPage() {
+  const { campaigns, activeCampaign, activeCampaignId, setActiveCampaignId, isLoading } = useCampaign();
+  const qc = useQueryClient();
+  const [modal, setModal] = useState<ModalState | null>(null);
+
+  const { data: hashtags = [] } = useQuery({
     queryKey: ['hashtags', activeCampaignId],
     queryFn: async () => {
-      const { data } = await supabase.from('tracked_hashtags').select('*').eq('campaign_id', activeCampaignId!).order('created_at');
+      const { data } = await supabase
+        .from('tracked_hashtags')
+        .select('*')
+        .eq('campaign_id', activeCampaignId!)
+        .order('created_at');
       return data ?? [];
     },
     enabled: Boolean(activeCampaignId),
   });
 
-  const add = useMutation({
-    mutationFn: async (tag: string) => {
-      const clean = tag.replace(/^#/, '').toLowerCase().trim();
-      if (!clean) return;
-      await supabase.from('tracked_hashtags').insert({ campaign_id: activeCampaignId!, hashtag: clean });
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['hashtags'] }); setInput(''); },
-  });
-
-  const remove = useMutation({
-    mutationFn: (id: string) => supabase.from('tracked_hashtags').delete().eq('id', id).then(({ error }) => { if (error) throw error; }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['hashtags'] }),
-  });
-
-  const toggle = useMutation({
-    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
-      supabase.from('tracked_hashtags').update({ active }).eq('id', id).then(({ error }) => { if (error) throw error; }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['hashtags'] }),
-  });
-
-  function handleAdd() {
-    const tags = input.split(/[\s,]+/).filter(Boolean);
-    tags.forEach((t) => add.mutate(t));
-  }
-
-  return (
-    <Card>
-      <CardHeader><CardTitle>Tracked Hashtags</CardTitle></CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex gap-2">
-          <Input
-            placeholder="#marketing, #socialmedia"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-          />
-          <Button onClick={handleAdd} size="md" className="shrink-0"><Plus className="w-4 h-4" /></Button>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {rows.map((row) => (
-            <div
-              key={row.id}
-              className={cn(
-                'flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full text-[13px] font-medium transition-all',
-                row.active ? 'bg-accent/10 text-accent' : 'bg-[#E8E8ED] text-tertiary',
-              )}
-            >
-              <button onClick={() => toggle.mutate({ id: row.id, active: !row.active })} className="hover:opacity-70">
-                #{row.hashtag}
-              </button>
-              <button onClick={() => remove.mutate(row.id)} className="hover:text-destructive">
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          ))}
-          {rows.length === 0 && <p className="text-caption">No hashtags tracked yet.</p>}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ----- Profiles tab -----
-function ProfilesTab() {
-  const { activeCampaignId } = useCampaign();
-  const qc = useQueryClient();
-  const [input, setInput] = useState('');
-
-  const { data: rows = [] } = useQuery({
+  const { data: profiles = [] } = useQuery({
     queryKey: ['profiles', activeCampaignId],
     queryFn: async () => {
-      const { data } = await supabase.from('tracked_profiles').select('*').eq('campaign_id', activeCampaignId!).order('created_at');
+      const { data } = await supabase
+        .from('tracked_profiles')
+        .select('*')
+        .eq('campaign_id', activeCampaignId!)
+        .order('created_at');
       return data ?? [];
     },
     enabled: Boolean(activeCampaignId),
   });
 
-  const add = useMutation({
-    mutationFn: async (handle: string) => {
-      const clean = handle.replace(/^@/, '').toLowerCase().trim();
-      if (!clean) return;
-      await supabase.from('tracked_profiles').insert({ campaign_id: activeCampaignId!, handle: clean });
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['profiles'] }); setInput(''); },
+  const removeHashtag = useMutation({
+    mutationFn: (id: string) => supabase.from('tracked_hashtags').delete().eq('id', id).then(({ error }) => { if (error) throw error; }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hashtags', activeCampaignId] }),
   });
 
-  const remove = useMutation({
+  const toggleHashtag = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      supabase.from('tracked_hashtags').update({ active }).eq('id', id).then(({ error }) => { if (error) throw error; }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hashtags', activeCampaignId] }),
+  });
+
+  const removeProfile = useMutation({
     mutationFn: (id: string) => supabase.from('tracked_profiles').delete().eq('id', id).then(({ error }) => { if (error) throw error; }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['profiles'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['profiles', activeCampaignId] }),
   });
 
-  function handleAdd() {
-    const handles = input.split(/[\s,]+/).filter(Boolean);
-    handles.forEach((h) => add.mutate(h));
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-40">
+        <div className="w-5 h-5 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+      </div>
+    );
   }
 
   return (
-    <Card>
-      <CardHeader><CardTitle>Tracked Profiles</CardTitle></CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex gap-2">
-          <Input
-            placeholder="@nike, @adidas"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-          />
-          <Button onClick={handleAdd} size="md" className="shrink-0"><Plus className="w-4 h-4" /></Button>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {rows.map((row) => (
-            <div key={row.id} className="flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full text-[13px] font-medium bg-accent/10 text-accent">
-              @{row.handle}
-              <button onClick={() => remove.mutate(row.id)} className="hover:text-destructive">
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          ))}
-          {rows.length === 0 && <p className="text-caption">No profiles tracked yet.</p>}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ----- Page -----
-export function SetupPage() {
-  const [params, setParams] = useSearchParams();
-  const tab = (params.get('tab') as Tab) ?? 'campaigns';
-
-  return (
-    <div className="space-y-6 animate-fade-in">
-      <h1 className="text-title-xl">Setup</h1>
-
-      {/* Tabs */}
-      <div className="flex gap-1 bg-[#E8E8ED] p-1 rounded-lg w-fit">
-        {TABS.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => setParams({ tab: id })}
-            className={cn(
-              'flex items-center gap-1.5 px-4 py-1.5 rounded-md text-[14px] font-medium transition-all',
-              tab === id ? 'bg-surface text-primary shadow-subtle' : 'text-secondary hover:text-primary',
-            )}
-          >
-            <Icon className="w-3.5 h-3.5" />
-            {label}
-          </button>
-        ))}
+    <div className="space-y-8 animate-fade-in">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-title-xl">Setup</h1>
+        <Button onClick={() => setModal({ type: 'new-campaign' })} className="gap-2">
+          <Plus className="w-4 h-4" /> New Campaign
+        </Button>
       </div>
 
-      {tab === 'campaigns' && <CampaignsTab />}
-      {tab === 'hashtags'  && <HashtagsTab />}
-      {tab === 'profiles'  && <ProfilesTab />}
+      {/* Campaigns */}
+      <section className="space-y-3">
+        <h2 className="text-title">Campaigns</h2>
+
+        {campaigns.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center">
+              <Megaphone className="w-8 h-8 text-tertiary mx-auto mb-3" />
+              <p className="text-[14px] text-secondary">No campaigns yet.</p>
+              <p className="text-caption mt-1">Create one to start tracking hashtags and profiles.</p>
+            </CardContent>
+          </Card>
+        ) : (() => {
+          const active = campaigns.find((c) => c.id === activeCampaignId);
+          const others = campaigns.filter((c) => c.id !== activeCampaignId);
+
+          function CampaignRow({ c, isActive }: { c: Campaign; isActive: boolean }) {
+            return (
+              <div className={cn(
+                'flex items-center gap-3 px-4 py-3.5 rounded-xl border transition-all',
+                isActive ? 'glass-raised border-accent/30' : 'glass border-border-subtle',
+              )}>
+                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.color }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[14px] font-semibold truncate">{c.name}</p>
+                  {c.description && <p className="text-caption mt-0.5 truncate">{c.description}</p>}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {isActive ? (
+                    <Badge variant="default">Active</Badge>
+                  ) : (
+                    <Button variant="secondary" size="sm" onClick={() => setActiveCampaignId(c.id)}>
+                      Select
+                    </Button>
+                  )}
+                  <IconButton
+                    icon={Pencil}
+                    onClick={() => setModal({ type: 'edit-campaign', campaign: c })}
+                    title="Edit"
+                  />
+                  <IconButton
+                    icon={Trash2}
+                    variant="destructive"
+                    onClick={() => setModal({ type: 'delete-campaign', campaign: c })}
+                    title="Delete"
+                  />
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div className="space-y-3">
+              {/* Active campaign — always prominent */}
+              {active && <CampaignRow c={active} isActive />}
+
+              {/* Others — compact scrollable list */}
+              {others.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-label px-1">Other campaigns</p>
+                  <div className="space-y-1.5 max-h-[168px] overflow-y-auto pr-1">
+                    {others.map((c) => <CampaignRow key={c.id} c={c} isActive={false} />)}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </section>
+
+      {/* Active campaign detail */}
+      {activeCampaign && (
+        <>
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-border-subtle" />
+            <span className="text-[12px] text-tertiary flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full" style={{ background: activeCampaign.color }} />
+              {activeCampaign.name}
+            </span>
+            <div className="h-px flex-1 bg-border-subtle" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-5">
+            {/* Hashtags */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-1.5">
+                  <Hash className="w-3.5 h-3.5 text-accent" /> Hashtags
+                </CardTitle>
+                <button
+                  onClick={() => setModal({ type: 'add-hashtag' })}
+                  className="flex items-center gap-1 text-[12px] text-accent hover:text-accent-hover transition-colors font-medium"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add
+                </button>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {hashtags.length === 0 ? (
+                  <p className="text-caption py-2">No hashtags tracked yet.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {hashtags.map((row) => (
+                      <div
+                        key={row.id}
+                        className={cn(
+                          'flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full text-[13px] font-medium transition-all',
+                          row.active ? 'bg-accent/15 text-accent' : 'bg-white/8 text-tertiary',
+                        )}
+                      >
+                        <button
+                          onClick={() => toggleHashtag.mutate({ id: row.id, active: !row.active })}
+                          className="hover:opacity-70 transition-opacity"
+                          title={row.active ? 'Disable' : 'Enable'}
+                        >
+                          #{row.hashtag}
+                        </button>
+                        <button
+                          onClick={() => removeHashtag.mutate(row.id)}
+                          className="hover:text-destructive transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {hashtags.some((h) => !h.active) && (
+                  <p className="text-[11px] text-tertiary mt-3">Dimmed hashtags are disabled — click to toggle.</p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Profiles */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-accent" /> Profiles
+                </CardTitle>
+                <button
+                  onClick={() => setModal({ type: 'add-profile' })}
+                  className="flex items-center gap-1 text-[12px] text-accent hover:text-accent-hover transition-colors font-medium"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add
+                </button>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {profiles.length === 0 ? (
+                  <p className="text-caption py-2">No profiles tracked yet.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {profiles.map((row) => (
+                      <div
+                        key={row.id}
+                        className="flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full text-[13px] font-medium bg-accent/15 text-accent"
+                      >
+                        @{row.handle}
+                        <button
+                          onClick={() => removeProfile.mutate(row.id)}
+                          className="hover:text-destructive transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
+
+      {/* Modals */}
+      {modal?.type === 'new-campaign' && (
+        <CampaignModal onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'edit-campaign' && (
+        <CampaignModal initial={modal.campaign} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'delete-campaign' && (
+        <DeleteCampaignModal campaign={modal.campaign} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'add-hashtag' && activeCampaignId && (
+        <AddItemModal type="hashtag" campaignId={activeCampaignId} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'add-profile' && activeCampaignId && (
+        <AddItemModal type="profile" campaignId={activeCampaignId} onClose={() => setModal(null)} />
+      )}
     </div>
   );
 }
