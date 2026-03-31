@@ -155,10 +155,10 @@ export function HomePage() {
             <button
               onClick={() => collect.mutate()}
               disabled={isRunning}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[13px] font-medium bg-accent text-white transition-all duration-150 hover:bg-accent/80 disabled:opacity-50 disabled:pointer-events-none"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[13px] font-semibold bg-accent text-[#0D0D0D] transition-all duration-150 hover:bg-accent-hover disabled:opacity-50 disabled:pointer-events-none"
             >
               {isRunning ? (
-                <><div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />Collecting…</>
+                <><div className="w-3.5 h-3.5 rounded-full border-2 border-[#0D0D0D] border-t-transparent animate-spin" />Collecting…</>
               ) : (
                 <><Play className="w-3.5 h-3.5" />Collect Now</>
               )}

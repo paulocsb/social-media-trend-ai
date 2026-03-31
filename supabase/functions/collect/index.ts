@@ -264,8 +264,9 @@ Deno.serve(async (req) => {
 
   const devMode = Deno.env.get('DEV_MODE') === 'true';
   const apifyToken = Deno.env.get('APIFY_TOKEN');
+  const useFixtures = devMode && !apifyToken;
 
-  if (!devMode && !apifyToken) {
+  if (!useFixtures && !apifyToken) {
     return new Response(JSON.stringify({ ok: false, error: 'APIFY_TOKEN not configured' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -307,15 +308,16 @@ Deno.serve(async (req) => {
     const hashtags = (hashtagRows ?? []).map((r) => r.hashtag);
     const handles = (profileRows ?? []).map((r) => r.handle);
 
-    // Collect raw posts — use fixtures in DEV_MODE, Apify in production
+    // Collect raw posts — fixtures when DEV_MODE + no token, Apify otherwise
     const rawPosts: RawPost[] = [];
-    if (devMode) {
-      console.log('[collect] DEV_MODE — using fixture data, skipping Apify');
+    if (useFixtures) {
+      console.log('[collect] DEV_MODE (no APIFY_TOKEN) — using fixture data');
       rawPosts.push(...devFixtures(
         target !== 'profiles' ? hashtags : [],
         target !== 'hashtags' ? handles : [],
       ));
     } else {
+      if (devMode) console.log('[collect] DEV_MODE + APIFY_TOKEN set — using Apify');
       if ((target === 'hashtags' || target === 'both') && hashtags.length > 0) {
         rawPosts.push(...await collectHashtags(apifyToken!, hashtags, limit));
       }

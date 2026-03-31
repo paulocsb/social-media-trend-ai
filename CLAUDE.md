@@ -14,7 +14,7 @@ React 18 · Vite · Supabase · TypeScript · Deno Edge Functions · pnpm worksp
 | `packages/dashboard` | React SPA — 6 routes, campaign-scoped |
 | `supabase/functions/collect` | Manual collection trigger (Apify → normalize → score → insert) |
 | `supabase/functions/analysis` | AI prompt builder + submit |
-| `supabase/functions/alerts` | Threshold evaluation |
+| `supabase/functions/alerts` | Alert CRUD (threshold evaluation is inline in `collect`) |
 
 ## Dashboard routes
 | Path | Purpose |
@@ -22,7 +22,7 @@ React 18 · Vite · Supabase · TypeScript · Deno Edge Functions · pnpm worksp
 | `/` | Home — manual collect trigger, trending hashtags, top posts |
 | `/analysis` | AI analysis workflow |
 | `/history` | Past runs and analyses |
-| `/setup` | Campaigns → hashtags → profiles (URL-driven tabs with `?tab=`) |
+| `/setup` | Campaigns → hashtags → profiles (campaign-scoped, modal-based CRUD) |
 | `/settings` | Alerts |
 | `/account` | Email and password |
 
@@ -31,7 +31,7 @@ React 18 · Vite · Supabase · TypeScript · Deno Edge Functions · pnpm worksp
 - **No API server**: dashboard queries Supabase directly; only collection uses an Edge Function
 - **Campaign-scoped data**: every table has `campaign_id`; RLS enforces isolation
 - **Supabase Auth**: replaces custom JWT — use `supabase.auth` everywhere
-- **Setup tab deep-linking**: `/setup?tab=hashtags` opens the Hashtags tab directly — `SetupPage` reads `useSearchParams`
+- **Alert evaluation**: runs inline at the end of each `collect` call — `triggeredAlerts` returned in the response, shown as a dismissible banner on Home
 
 ## Local dev
 ```bash

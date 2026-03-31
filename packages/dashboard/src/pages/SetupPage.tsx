@@ -10,7 +10,7 @@ import { Badge } from '../components/ui/badge';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { cn } from '../lib/utils';
 
-const COLORS = ['#8B5CF6','#6366f1','#3B82F6','#10B981','#F59E0B','#EF4444','#EC4899','#06B6D4'];
+const COLORS = ['#B9DB23','#55CD0A','#E4FD80','#38BDF8','#F59E0B','#E94045','#EC4899','#06B6D4'];
 
 // ----------------------------------------------------------------
 // Shared modal shell

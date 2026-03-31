@@ -5,37 +5,42 @@ export default {
     extend: {
       fontFamily: {
         sans: [
-          '-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'SF Pro Text',
+          'SF Pro Display', 'SF Pro Text',
+          '-apple-system', 'BlinkMacSystemFont',
           'Inter', 'system-ui', 'sans-serif',
+        ],
+        mono: [
+          'SF Mono', 'ui-monospace',
+          'SFMono-Regular', 'Menlo', 'monospace',
         ],
       },
       colors: {
-        // Page & surface
-        background:      '#080816',
-        surface:         '#0F0F23',
-        'surface-raised':'#161630',
-        overlay:         'rgba(0,0,0,0.7)',
+        // Surface scale
+        background:       '#0D0D0D',
+        surface:          '#191B1E',   // surface-400
+        'surface-raised': '#33383D',   // surface-300
+        overlay:          'rgba(0,0,0,0.75)',
 
         // Text
-        primary:   '#E8E8F5',
-        secondary: '#8080A0',
-        tertiary:  '#50506E',
+        primary:   '#FFFFFF',                      // surface-100
+        secondary: 'rgba(235,235,245,0.6)',         // opacity-font primary
+        tertiary:  'rgba(235,235,245,0.35)',
 
-        // Accent — soft violet
+        // Accent — lime/chartreuse
         accent: {
-          DEFAULT: '#8B5CF6',
-          hover:   '#7C3AED',
-          light:   'rgba(139,92,246,0.15)',
+          DEFAULT: '#B9DB23',                      // primary-400
+          hover:   '#CFF241',                      // primary-300
+          light:   'rgba(185,219,35,0.12)',
         },
 
         // Borders
-        border:          'rgba(255,255,255,0.1)',
-        'border-subtle': 'rgba(255,255,255,0.06)',
+        border:          'rgba(255,255,255,0.08)',
+        'border-subtle': 'rgba(255,255,255,0.05)', // stroke-button primary
 
         // Semantic
-        success:     '#10B981',
+        success:     '#55CD0A',   // success-400
         warning:     '#F59E0B',
-        destructive: '#EF4444',
+        destructive: '#E94045',   // danger-400
         info:        '#38BDF8',
       },
       borderRadius: {
@@ -48,15 +53,27 @@ export default {
         full:    '9999px',
       },
       boxShadow: {
-        card:     '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06)',
-        panel:    '0 8px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08)',
-        modal:    '0 24px 80px rgba(0,0,0,0.7)',
-        subtle:   '0 2px 8px rgba(0,0,0,0.3)',
-        glow:     '0 0 28px rgba(139,92,246,0.35)',
-        'glow-sm':'0 0 14px rgba(139,92,246,0.25)',
+        card:      '0 4px 24px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)',
+        panel:     '0 8px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)',
+        modal:     '0 24px 80px rgba(0,0,0,0.8)',
+        subtle:    '0 2px 8px rgba(0,0,0,0.4)',
+        glow:      '0 0 28px rgba(185,219,35,0.3)',
+        'glow-sm': '0 0 14px rgba(185,219,35,0.2)',
+        button:    'inset 0 0 0 1px rgba(255,255,255,0.05), 0 2px 8px rgba(0,0,0,0.4)',
       },
       fontSize: {
         '2xs': ['10px', { lineHeight: '14px' }],
+        // Typography scale (SF Pro, base 16, scale 1.2)
+        'caption':    ['11px',  { lineHeight: '16px' }],
+        'body-sm':    ['12px',  { lineHeight: '18px' }],
+        'body-md':    ['14px',  { lineHeight: '20px' }],
+        'body-lg':    ['18px',  { lineHeight: '26px' }],
+        'body-xl':    ['20px',  { lineHeight: '28px' }],
+        'title-lg':   ['24px',  { lineHeight: '30px', fontWeight: '600' }],
+        'title-xl':   ['28px',  { lineHeight: '34px', fontWeight: '600' }],
+        'headline-md':['32px',  { lineHeight: '38px', fontWeight: '700' }],
+        'headline-lg':['40px',  { lineHeight: '46px', fontWeight: '700' }],
+        'headline-xl':['48px',  { lineHeight: '54px', fontWeight: '700' }],
       },
       keyframes: {
         'fade-in':  { from: { opacity: '0', transform: 'translateY(6px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
