@@ -166,10 +166,10 @@ Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in your hosting provider (V
 Each post is scored 0–100:
 
 ```
-score = velocity          × 40%
-      + engagement rate   × 30%
-      + absolute engagement × 20%
-      + recency boost     × 10%  (linear decay → 0 at 6h)
+score = velocity          × 25%   (engagement growth vs previous run)
+      + engagement abs    × 35%   (log-normalised likes + comments×2 + shares×3)
+      + engagement rate   × 25%   ((likes+comments)/views for reels)
+      + recency           × 15%   (exponential decay, 24h half-life from publishedAt)
 ```
 
 ---

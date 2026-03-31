@@ -222,11 +222,13 @@ Flow:
 
 ```
 trendScore =
-  velocityScore        × 0.40   // default 0 (requires historical data)
-  + engagementRate     × 0.30   // (likes + comments) / max(views, 1)
-  + absoluteEngagement × 0.20   // min(total / 100k, 1)
-  + recencyBoost       × 0.10   // linear decay: 1.0 at 0h → 0.0 at 6h
+  velocity    × 25%   // engagement growth vs previous run (0 on first appearance)
+  + engAbs    × 35%   // log10-normalised (likes + comments×2 + shares×3) / ref 50k
+  + engRate   × 25%   // (likes+comments)/views for reels; proxied from engAbs for images
+  + recency   × 15%   // exponential decay e^(-age/24h) from publishedAt
 ```
+
+Velocity is computed by querying `scored_posts` for existing engagement numbers before each upsert — one extra DB query per run. First-time posts score 0 velocity.
 
 ### DEV_MODE fixtures
 

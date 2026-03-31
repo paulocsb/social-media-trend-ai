@@ -96,29 +96,63 @@ function normalizePosts(rawPosts: RawPost[]): NormalizedPost[] {
 }
 
 // ----------------------------------------------------------------
-// Scorer (ported from packages/processor)
+// Scorer
 // ----------------------------------------------------------------
-const DECAY_WINDOW_MS = 6 * 60 * 60 * 1000;
 
-function scorePost(post: NormalizedPost, velocityScore = 0): ScoredPost {
-  const total = post.likes + post.comments + post.shares;
-  const er = total / Math.max(post.views, 1);
-  const abs = Math.min(total / 100_000, 1);
-  const ageMs = Date.now() - post.collectedAt.getTime();
-  const recency = Math.max(0, 1 - ageMs / DECAY_WINDOW_MS);
+// Log-scale reference: a post with ~50k weighted interactions scores ~1.0
+const ENGAGEMENT_REF = 50_000;
+// Exponential decay half-life: 24h
+const RECENCY_HALF_LIFE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Score a post 0–100.
+ *
+ * Weights:
+ *   25% velocity    — engagement growth since last run (0 on first appearance)
+ *   35% engAbs      — log-normalised weighted engagement (likes + comments×2 + shares×3)
+ *   25% engRate     — (likes+comments)/views for reels; proxied from engAbs for images
+ *   15% recency     — exponential decay with 24h half-life from publishedAt
+ *
+ * @param prevEngagement  previous (likes+comments) from DB; -1 = first time seen
+ */
+function scorePost(post: NormalizedPost, prevEngagement = -1): ScoredPost {
+  // Weighted engagement — comments and shares signal stronger intent
+  const weightedEng = post.likes + post.comments * 2 + post.shares * 3;
+  const engAbs = Math.min(
+    Math.log10(1 + weightedEng) / Math.log10(1 + ENGAGEMENT_REF),
+    1,
+  );
+
+  // Engagement rate — only meaningful for reels/video with real view data
+  const er = post.views > 100
+    ? Math.min((post.likes + post.comments) / post.views, 1)
+    : engAbs * 0.5; // image posts: proxy so ER doesn't collapse to 0
+
+  // Velocity — growth ratio vs previous run; 0 on first appearance
+  const currentEng = post.likes + post.comments;
+  let velocity = 0;
+  if (prevEngagement === 0 && currentEng > 0) {
+    velocity = 1; // went from zero to something → max velocity
+  } else if (prevEngagement > 0) {
+    velocity = Math.min(Math.max((currentEng - prevEngagement) / prevEngagement, 0), 1);
+  }
+
+  // Recency — exponential decay using publishedAt when available
+  const ageMs = Date.now() - (post.publishedAt ?? post.collectedAt).getTime();
+  const recency = Math.exp(-ageMs / RECENCY_HALF_LIFE_MS);
 
   const trendScore = Math.min(100, Math.max(0,
-    velocityScore * 0.40 +
-    er * 0.30 * 100 +
-    abs * 0.20 * 100 +
-    recency * 0.10 * 100,
+    velocity * 0.25 * 100 +
+    engAbs   * 0.35 * 100 +
+    er       * 0.25 * 100 +
+    recency  * 0.15 * 100,
   ));
 
-  return { ...post, engagementRate: er, trendScore, velocityScore };
+  return { ...post, engagementRate: er, trendScore, velocityScore: velocity * 100 };
 }
 
 // ----------------------------------------------------------------
-// Dev fixtures (DEV_MODE=true — no Apify call, realistic mock data)
+// Dev fixtures (DEV_MODE=true + no APIFY_TOKEN — realistic mock data)
 // ----------------------------------------------------------------
 function devFixtures(hashtags: string[], handles: string[]): RawPost[] {
   const now = Date.now();
@@ -326,9 +360,26 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Normalize and score
+    // Normalize
     const normalized = normalizePosts(rawPosts);
-    const scored = normalized.map((p) => scorePost(p));
+
+    // Fetch previous engagement for velocity — one query per run
+    const prevEngMap = new Map<string, number>();
+    if (normalized.length > 0) {
+      const { data: prevPosts } = await supabase
+        .from('scored_posts')
+        .select('id, likes, comments')
+        .eq('campaign_id', campaignId)
+        .in('id', normalized.map((p) => p.id));
+      for (const prev of prevPosts ?? []) {
+        prevEngMap.set(prev.id, (prev.likes ?? 0) + (prev.comments ?? 0));
+      }
+    }
+
+    // Score with velocity
+    const scored = normalized.map((p) =>
+      scorePost(p, prevEngMap.has(p.id) ? prevEngMap.get(p.id)! : -1),
+    );
 
     // Insert scored posts
     if (scored.length > 0) {
