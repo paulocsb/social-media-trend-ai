@@ -26,7 +26,7 @@ Follow these steps:
 - [ ] Props interfaces are defined for all new components
 - [ ] No non-null assertions (`!`) except on `activeCampaignId!` inside `enabled: Boolean(activeCampaignId)` guards
 
-### Design System (Apple Design + Vision Pro)
+### Design System
 - [ ] Text ≥20px uses `font-display` (SF Pro Display) class
 - [ ] Text <20px uses default `font-sans` (SF Pro Text)
 - [ ] Accent color is ONLY `text-accent`, `bg-accent`, `border-accent`, `text-accent/XX` — no hardcoded `#0071e3`

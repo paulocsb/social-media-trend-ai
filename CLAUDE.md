@@ -32,7 +32,7 @@ Setup campaign → add hashtags/profiles
 | Layer | Technology | Notes |
 |---|---|---|
 | Frontend | React 18 + Vite + TypeScript | SPA, no SSR |
-| Styling | Tailwind CSS v3 + custom tokens | Apple Design System — see `docs/design-system.md` |
+| Styling | Tailwind CSS v3 + custom tokens | Custom design system — see `docs/design-system.md` |
 | State | TanStack Query v5 | All server state; no Redux/Zustand |
 | Routing | React Router v6 | Hash-free, 6 routes |
 | Backend | Supabase (PostgreSQL + Auth + Edge Functions) | No custom API server |
@@ -52,7 +52,7 @@ instagram-media-ai/
 │   └── commands/          ← AI slash commands (init, plan, implement, review)
 ├── docs/
 │   ├── architecture.md    ← Full technical reference
-│   ├── design-system.md   ← Design tokens, components, Apple Design rules
+│   ├── design-system.md   ← Design tokens, components, typography, patterns
 │   └── pages.md           ← Per-page documentation (queries, state, UX)
 ├── packages/
 │   ├── shared/            ← @trend/shared
@@ -105,17 +105,17 @@ instagram-media-ai/
 
 ## 4. Design System (summary — full detail in `docs/design-system.md`)
 
-**Apple Design.md principles applied.** Key rules:
+Full detail in `docs/design-system.md`. Key rules:
 
 - **Fonts:** `SF Pro Display` (≥20px) via `font-display` Tailwind class; `SF Pro Text` (<20px) is the default `font-sans`. Never mix.
-- **Accent:** `#0071e3` (Apple Blue) — the ONLY chromatic color for interactive elements.
+- **Accent:** `#0071e3` — the ONLY chromatic color for interactive elements.
 - **Light bg:** `#f5f5f7` · **Dark bg:** `#000000` · **Primary text light:** `#1d1d1f`
 - **Letter-spacing:** Negative at ALL sizes (−0.28px at 28px+, −0.374px at 17−20px, −0.224px at 14px, −0.12px at 12px)
 - **Headlines:** `font-semibold` (600) — never 700+ on headlines
 - **Buttons:** No glow shadows, no `active:scale`, primary weight is `font-medium` (400−500)
 - **Glass:** `.glass` and `.glass-raised` — `backdrop-filter: saturate(180%) blur(20px)` with a single soft shadow. No inset layers.
 - **Shadows:** Single layer only — `rgba(0,0,0,0.22) 3px 5px 30px 0px` or nothing.
-- **Border radius:** Vision Pro scale — DEFAULT 12px, lg 16px, xl 20px, 2xl 24px. Pills use `rounded-full`.
+- **Border radius:** Generous spatial scale — DEFAULT 12px, lg 16px, xl 20px, 2xl 24px. Pills use `rounded-full`.
 - **Semantic colors:** success `#28cd41`, warning `#ff9500`, destructive `#ff3b30` — only for status, never as accent.
 
 **Component conventions:**
