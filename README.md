@@ -204,6 +204,44 @@ Posts can also be re-scored after collection via the **Rescore** button in Histo
 
 ---
 
+## Working with AI
+
+This project is set up for AI-assisted development using Claude Code. A set of slash
+commands are defined in `.claude/commands/` to give any AI agent full project awareness
+and a consistent workflow.
+
+### Session workflow
+
+**Always start with `/init`** — it loads all context files, checks git state, and outputs
+a session brief so the AI has everything it needs before touching any code.
+
+```
+/init                        ← start every session here
+/plan <feature description>  ← before implementing anything non-trivial
+/implement                   ← work through the plan step by step
+/review                      ← after writing code, check against project standards
+```
+
+### What each command does
+
+| Command | Purpose |
+|---|---|
+| `/init` | Reads `CLAUDE.md`, `docs/architecture.md`, `docs/design-system.md`, `docs/pages.md` and git state. Outputs a structured session brief. |
+| `/plan <feature>` | Reads affected files, checks existing patterns, produces a step-by-step plan with affected files, design checklist, and risks. |
+| `/implement` | Executes the plan step by step with task tracking. Enforces design and code patterns on every edit. |
+| `/review` | Runs architecture, TypeScript, design system, security, and UX checklists against the current diff. |
+
+### Reference docs
+
+| File | Purpose |
+|---|---|
+| `CLAUDE.md` | Master context — stack, structure, patterns, pipeline, architectural decisions |
+| `docs/architecture.md` | Full technical reference — DB schema, edge functions, pipelines |
+| `docs/design-system.md` | Design tokens, typography, components, UI patterns |
+| `docs/pages.md` | Per-page breakdown — layout, state, queries, key logic |
+
+---
+
 ## Dashboard Routes
 
 | Route | Page |

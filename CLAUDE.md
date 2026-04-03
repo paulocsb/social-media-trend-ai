@@ -340,11 +340,53 @@ supabase secrets set OLLAMA_URL=...
 
 ## 12. AI Agent Workflows
 
-Use these slash commands (defined in `.claude/commands/`):
+Slash commands are defined in `.claude/commands/` and available in every Claude Code
+session. Follow this workflow for every session — skipping steps leads to inconsistent
+code, missed patterns, and design violations.
 
-| Command | When to use |
-|---|---|
-| `/init` | Start of every session — loads full context |
-| `/plan <feature>` | Before implementing anything non-trivial |
-| `/implement` | Work through a plan step by step |
-| `/review` | After writing code — checks design, types, security, patterns |
+### Standard session workflow
+
+```
+1. /init          ← always first — loads full context, reports session state
+2. /plan <what>   ← before any non-trivial change — produces a reviewed plan
+3. /implement     ← executes the plan step by step with task tracking
+4. /review        ← after writing code — runs the full checklist
+```
+
+### Command reference
+
+**`/init`** — Run at the start of every session without exception.
+Reads `CLAUDE.md`, `docs/architecture.md`, `docs/design-system.md`, `docs/pages.md`,
+then checks `git status` and `git log`. Outputs a session brief covering stack, recent
+commits, uncommitted changes, and which files are most relevant to the current task.
+If you have a task in mind, describe it — the init will orient toward it automatically.
+
+**`/plan <feature description>`** — Run before implementing anything non-trivial.
+Reads all affected files, identifies the right patterns to follow, and produces:
+- One-sentence summary of what will be built
+- Table of affected files with change type and description
+- DB migration requirements (if any)
+- Numbered step-by-step implementation plan
+- Design checklist (font variants, accent usage, shadow rules, etc.)
+- Risks and edge cases
+
+Confirm the plan before proceeding to `/implement`.
+
+**`/implement`** — Run after a plan is agreed.
+Works through each step in order: creates tasks, marks them in-progress, makes the
+edit, confirms it looks correct, marks complete, then moves on. Enforces design and
+pattern rules at every edit. Finishes with a list of all changed files and next steps.
+
+**`/review`** — Run after writing code, before committing.
+Runs five checklists: Architecture & Patterns, TypeScript, Design System, Security & RLS,
+UX & Accessibility. Outputs issues grouped as Critical / Moderate / Minor with file
+locations and suggested fixes. "LGTM" means all checks passed.
+
+### When to skip `/plan`
+
+Only skip planning for:
+- Single-line text or copy changes
+- Fixing a typo or obvious bug with a known 1-line fix
+- Reverting a change
+
+For everything else — new features, refactors, DB changes, new components — always plan first.
