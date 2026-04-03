@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 import { CampaignProvider } from './lib/campaign';
+import { ThemeProvider } from './lib/theme';
 import { AppLayout } from './components/layout/AppLayout';
 import { LoginPage }         from './features/auth/Login';
 import { SignUpPage }        from './features/auth/SignUp';
@@ -38,6 +39,7 @@ export function App() {
   }
 
   return (
+    <ThemeProvider>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
@@ -69,5 +71,6 @@ export function App() {
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>
+    </ThemeProvider>
   );
 }

@@ -125,7 +125,7 @@ export function ConfiguracoesPage() {
                     <td className="px-5 py-3">
                       <button
                         onClick={() => toggleAlert.mutate({ id: alert.id, active: !alert.active })}
-                        className={`w-8 h-4 rounded-full transition-colors ${alert.active ? 'bg-accent' : 'bg-white/20'}`}
+                        className={`w-8 h-4 rounded-full transition-colors ${alert.active ? 'bg-accent' : 'bg-surface-strong'}`}
                       >
                         <span className={`block w-3 h-3 rounded-full bg-white shadow mx-0.5 transition-transform ${alert.active ? 'translate-x-4' : ''}`} />
                       </button>

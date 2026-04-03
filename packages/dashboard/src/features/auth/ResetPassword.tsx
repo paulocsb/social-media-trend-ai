@@ -123,7 +123,7 @@ export function ResetPasswordPage() {
                         : level <= 2 ? 'bg-warning'
                         : level <= 3 ? 'bg-accent'
                         : 'bg-success'
-                      : 'bg-white/10'
+                      : 'bg-surface-tint'
                   }`}
                 />
               ))}

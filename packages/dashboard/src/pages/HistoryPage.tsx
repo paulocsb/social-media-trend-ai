@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronUp, ArrowRight, Trash2, AlertTriangle, Check } from 'lucide-react';
+import { ChevronDown, ChevronUp, ArrowRight, Trash2, AlertTriangle, Check, RefreshCw } from 'lucide-react';
 import { IconButton } from '../components/ui/icon-button';
 import { supabase } from '../lib/supabase';
 import { useCampaign } from '../lib/campaign';
@@ -45,7 +45,7 @@ function Checkbox({ checked, onChange, onClick }: {
         'w-4 h-4 rounded flex items-center justify-center transition-all border shrink-0',
         checked
           ? 'bg-accent border-accent shadow-glow-sm'
-          : 'bg-white/5 border-border hover:border-accent/50',
+          : 'bg-surface-inset border-border hover:border-accent/50',
       )}
     >
       {checked && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
@@ -60,6 +60,8 @@ export function HistoryPage() {
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState<string[] | null>(null);
+  const [rescoringRunId, setRescoringRunId] = useState<string | null>(null);
+  const [rescoreMsg, setRescoreMsg] = useState<{ runId: string; text: string; ok: boolean } | null>(null);
 
   const { data: runs = [], isLoading: runsLoading } = useQuery({
     queryKey: ['runs', activeCampaignId],
@@ -105,6 +107,34 @@ export function HistoryPage() {
       });
       setConfirmDelete(null);
       qc.invalidateQueries({ queryKey: ['runs', activeCampaignId] });
+    },
+  });
+
+  const rescore = useMutation({
+    mutationFn: async (runId: string) => {
+      setRescoringRunId(runId);
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/collect/rescore`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ campaignId: activeCampaignId, runId }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json() as Promise<{ ok: boolean; rescored: number }>;
+    },
+    onSuccess: (data, runId) => {
+      setRescoringRunId(null);
+      setRescoreMsg({ runId, text: `${data.rescored} posts rescored`, ok: true });
+      qc.invalidateQueries({ queryKey: ['top-posts', activeCampaignId] });
+      setTimeout(() => setRescoreMsg(null), 4000);
+    },
+    onError: (err, runId) => {
+      setRescoringRunId(null);
+      setRescoreMsg({ runId, text: (err as Error).message, ok: false });
+      setTimeout(() => setRescoreMsg(null), 5000);
     },
   });
 
@@ -177,7 +207,7 @@ export function HistoryPage() {
                       <tr
                         key={run.id}
                         className={cn(
-                          'transition-colors hover:bg-white/3',
+                          'transition-colors hover:bg-surface-hover',
                           !isLast && !isExpanded && 'border-b border-border-subtle',
                         )}
                       >
@@ -198,15 +228,39 @@ export function HistoryPage() {
                         </td>
                         {/* Actions */}
                         <td className="pr-4 py-3">
-                          <button
-                            onClick={() => setExpandedRun(isExpanded ? null : run.id)}
-                            className="p-2 rounded-full border bg-white/[0.06] border-white/[0.1] text-secondary hover:bg-white/[0.12] hover:border-white/[0.16] hover:text-primary active:scale-95 transition-all duration-150"
-                          >
-                            {isExpanded
-                              ? <ChevronUp className="w-3.5 h-3.5" />
-                              : <ChevronDown className="w-3.5 h-3.5" />
-                            }
-                          </button>
+                          <div className="flex items-center gap-1.5 justify-end">
+                            {(run.status === 'completed' || run.status === 'partial') && (
+                              <div className="relative">
+                                <button
+                                  onClick={() => rescore.mutate(run.id)}
+                                  disabled={rescoringRunId === run.id}
+                                  title="Rescore posts"
+                                  className="p-2 rounded-full border bg-accent/[0.08] border-accent/[0.25] text-accent hover:bg-accent/[0.18] hover:border-accent/[0.45] active:scale-95 disabled:opacity-50 disabled:pointer-events-none transition-all duration-150"
+                                >
+                                  <RefreshCw className={cn('w-3.5 h-3.5', rescoringRunId === run.id && 'animate-spin')} />
+                                </button>
+                                {rescoreMsg?.runId === run.id && (
+                                  <div className={cn(
+                                    'absolute right-0 top-full mt-1.5 z-10 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11px] font-medium shadow-lg border',
+                                    rescoreMsg.ok
+                                      ? 'bg-success/10 border-success/25 text-success'
+                                      : 'bg-destructive/10 border-destructive/25 text-destructive',
+                                  )}>
+                                    {rescoreMsg.text}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            <button
+                              onClick={() => setExpandedRun(isExpanded ? null : run.id)}
+                              className="p-2 rounded-full border bg-surface-inset border-border-subtle text-secondary hover:bg-surface-active hover:border-border hover:text-primary active:scale-95 transition-all duration-150"
+                            >
+                              {isExpanded
+                                ? <ChevronUp className="w-3.5 h-3.5" />
+                                : <ChevronDown className="w-3.5 h-3.5" />
+                              }
+                            </button>
+                          </div>
                         </td>
                       </tr>
 
@@ -220,11 +274,11 @@ export function HistoryPage() {
                                 <p className="text-[12px] font-mono text-destructive/90 whitespace-pre-wrap break-all">{run.error_message}</p>
                               </div>
                             ) : topHashtags.length > 0 ? (
-                              <div className="rounded-xl bg-white/3 border border-border-subtle px-4 py-3">
+                              <div className="rounded-xl bg-surface-hover border border-border-subtle px-4 py-3">
                                 <p className="text-[11px] font-medium uppercase tracking-wider text-tertiary mb-2.5">Top hashtags this run</p>
                                 <div className="flex flex-wrap gap-2">
                                   {topHashtags.map(({ hashtag, score }) => (
-                                    <div key={hashtag} className="flex items-center gap-1.5 bg-white/5 border border-border-subtle rounded-full px-3 py-1">
+                                    <div key={hashtag} className="flex items-center gap-1.5 bg-surface-inset border border-border-subtle rounded-full px-3 py-1">
                                       <span className="text-[12px] text-primary">#{normalizeHashtag(hashtag)}</span>
                                       <span className="text-[11px] text-accent font-medium">{score}</span>
                                     </div>

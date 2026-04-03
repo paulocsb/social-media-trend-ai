@@ -172,18 +172,25 @@ All functions run on Deno. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are in
 Flow:
 1. Insert `collection_runs` row with `status: "running"`
 2. Fetch `tracked_hashtags` and `tracked_profiles` for the campaign
-3. **DEV_MODE:** return realistic fixture posts (skips Apify)
-4. **Production:** call Apify hashtag/profile scrapers
-5. Normalize raw posts → canonical schema
-6. Score each post (0–100, four weighted factors)
-7. Upsert into `scored_posts`
+3. **DEV_MODE + no token:** return realistic fixture posts (skips Apify)
+4. **Apify:** call hashtag/profile scrapers with `onlyPostsNewerThan` = today minus `MAX_POST_AGE_DAYS`
+5. Normalize raw posts → canonical schema; drop posts older than `MAX_POST_AGE_DAYS` (safety net)
+6. Math-score all posts; send top `AI_SCORER_LIMIT` to AI scorer (Anthropic → OpenAI → Ollama); fall back to math on failure
+7. Upsert into `scored_posts` with `run_id` set
 8. Aggregate hashtag scores → insert `hashtag_snapshots`; store top hashtags in `collection_runs.top_hashtags`
 9. Evaluate active alert thresholds against collected hashtag scores → return `triggeredAlerts` in response
 10. Update run to `status: "completed"` (or `"failed"` with `error_message` on error)
 
+**Rescore endpoint:** `POST /functions/v1/collect/rescore`
+**Body:** `{ campaignId, runId? }`
+
+Re-scores already-collected posts without calling Apify. Finds posts by `run_id` first, falls back to time-window query for posts where `run_id` is null. Useful after changing AI provider or `AI_SCORER_LIMIT`.
+
 **Env vars:**
-- `DEV_MODE=true` — use fixtures, skip Apify
-- `APIFY_TOKEN` — required in production when `DEV_MODE` is not set
+- `DEV_MODE=true` — use fixtures when no `APIFY_TOKEN` is set
+- `APIFY_TOKEN` — required in production (or locally to use real Apify data)
+- `AI_SCORER_LIMIT` — max posts sent to AI per collection (default `50`; `0` = math only)
+- `MAX_POST_AGE_DAYS` — only collect/keep posts newer than N days (default `2`)
 
 ### `analysis`
 
@@ -218,8 +225,22 @@ Flow:
 
 ## 5. Collection Pipeline
 
-### Trend Score Formula
+### Trend Score
 
+Scoring is AI-driven when an AI provider is configured (Anthropic → OpenAI → Ollama). The AI receives a compact payload per post and returns a 0–100 score based on these criteria:
+
+| Factor | Weight | Logic |
+|---|---|---|
+| Engagement quality | 35% | `likes + comments×2 + shares×3`, log-normalised to ~50k reference |
+| Engagement rate | 25% | `(likes+comments)/views` for reels; proxied from engAbs for images |
+| Velocity | 25% | growth ratio vs previous run; `null` = first time seen (0); capped at 1.0 |
+| Recency | 15% | exponential decay, 24h half-life from `publishedAt` |
+
+The math scorer runs on **all posts** first (free, no network). Only the top N posts by math score are sent to the AI — controlled by `AI_SCORER_LIMIT` (default `50`). The rest keep their math scores. This keeps AI cost constant regardless of collection size: 178 posts → 1 AI call of 50, not 4 calls of 50.
+
+Posts are sent to AI in batches of 50. If the AI call fails for any reason, math scores are used for all posts silently.
+
+**Mathematical fallback formula:**
 ```
 trendScore =
   velocity    × 25%   // engagement growth vs previous run (0 on first appearance)
@@ -287,20 +308,20 @@ Full auth flow via Supabase Auth:
 
 ### Design system
 
-Dark glass / Vision Pro-inspired Tailwind tokens:
+Dark glass Tailwind tokens (defined in `tailwind.config.js` and `index.css`):
 
 | Token | Value |
 |---|---|
-| Font | `-apple-system, BlinkMacSystemFont, SF Pro Display, Inter` |
-| Page background | `#080816` |
-| Surface | `#0F0F23` |
-| Card | `rgba(255,255,255,0.04)` + `backdrop-filter: blur(20px)` |
-| Primary text | `#F5F5F7` |
-| Secondary text | `rgba(255,255,255,0.55)` |
-| Accent (violet) | `#8B5CF6` |
+| Font | `SF Pro Display, -apple-system, BlinkMacSystemFont, Inter` |
+| Page background | `#0D0D0D` |
+| Surface | `#191B1E` |
+| Surface raised | `#33383D` |
+| Primary text | `#FFFFFF` |
+| Secondary text | `rgba(235,235,245,0.6)` |
+| Accent (lime) | `#B9DB23` |
 | Border | `rgba(255,255,255,0.08)` |
 
-Glass utilities (`.glass`, `.glass-raised`, `.glass-sidebar`) are defined in `index.css` under `@layer components`.
+Glass utilities (`.glass`, `.glass-raised`, `.glass-sidebar`) and skeleton shimmer (`.skeleton`) are defined in `index.css` under `@layer components`.
 
 ### Campaign context
 
@@ -314,7 +335,7 @@ Active campaign is persisted to `localStorage`. All queries filter by `campaign_
 
 | Path | Page | Key queries |
 |---|---|---|
-| `/` | Home | `collection_runs`, `scored_posts`, `hashtag_snapshots` |
+| `/` | Home | `collection_runs`, `scored_posts` (latest batch), `hashtag_snapshots` (latest batch) |
 | `/analysis` | Analysis | `analysis/providers`, `analysis/run`, `ai_analyses` |
 | `/history` | History | `collection_runs`, `ai_analyses` |
 | `/setup` | Setup | `campaigns`, `tracked_hashtags`, `tracked_profiles` |

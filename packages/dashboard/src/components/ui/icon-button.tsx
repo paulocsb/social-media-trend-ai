@@ -12,8 +12,8 @@ export function IconButton({ icon: Icon, variant = 'default', className, ...prop
         'p-2 rounded-full border transition-all duration-150',
         'disabled:opacity-40 disabled:pointer-events-none',
         variant === 'destructive'
-          ? 'bg-white/[0.06] border-white/[0.1] text-secondary hover:bg-destructive/15 hover:border-destructive/25 hover:text-destructive active:scale-95'
-          : 'bg-white/[0.06] border-white/[0.1] text-secondary hover:bg-white/[0.12] hover:border-white/[0.16] hover:text-primary active:scale-95',
+          ? 'bg-surface-inset border-border-subtle text-secondary hover:bg-destructive/15 hover:border-destructive/25 hover:text-destructive active:scale-95'
+          : 'bg-surface-inset border-border-subtle text-secondary hover:bg-surface-active hover:border-border hover:text-primary active:scale-95',
         className,
       )}
       {...props}

@@ -1,5 +1,8 @@
 node_modules/
 dist/
-.env
 .turbo/
 *.tsbuildinfo
+
+# Local env overrides — never commit
+.env.local
+*/.env.local
