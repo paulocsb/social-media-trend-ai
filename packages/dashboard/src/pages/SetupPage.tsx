@@ -232,7 +232,7 @@ function DeleteCampaignModal({ campaign, onClose }: { campaign: Campaign; onClos
     onSuccess: () => {
       if (activeCampaignId === campaign.id) {
         const next = campaigns.find((c) => c.id !== campaign.id);
-        setActiveCampaignId(next?.id ?? null);
+        if (next) setActiveCampaignId(next.id);
       }
       qc.invalidateQueries({ queryKey: ['campaigns'] });
       onClose();
@@ -306,18 +306,26 @@ export function SetupPage() {
   });
 
   const removeHashtag = useMutation({
-    mutationFn: (id: string) => supabase.from('tracked_hashtags').delete().eq('id', id).then(({ error }) => { if (error) throw error; }),
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('tracked_hashtags').delete().eq('id', id);
+      if (error) throw error;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hashtags', activeCampaignId] }),
   });
 
   const toggleHashtag = useMutation({
-    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
-      supabase.from('tracked_hashtags').update({ active }).eq('id', id).then(({ error }) => { if (error) throw error; }),
+    mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
+      const { error } = await supabase.from('tracked_hashtags').update({ active }).eq('id', id);
+      if (error) throw error;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hashtags', activeCampaignId] }),
   });
 
   const removeProfile = useMutation({
-    mutationFn: (id: string) => supabase.from('tracked_profiles').delete().eq('id', id).then(({ error }) => { if (error) throw error; }),
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('tracked_profiles').delete().eq('id', id);
+      if (error) throw error;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['profiles', activeCampaignId] }),
   });
 

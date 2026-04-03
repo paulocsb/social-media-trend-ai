@@ -55,13 +55,18 @@ export function ConfiguracoesPage() {
   });
 
   const deleteAlert = useMutation({
-    mutationFn: (id: string) => supabase.from('alerts').delete().eq('id', id).then(({ error }) => { if (error) throw error; }),
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('alerts').delete().eq('id', id);
+      if (error) throw error;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['alerts'] }),
   });
 
   const toggleAlert = useMutation({
-    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
-      supabase.from('alerts').update({ active }).eq('id', id).then(({ error }) => { if (error) throw error; }),
+    mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
+      const { error } = await supabase.from('alerts').update({ active }).eq('id', id);
+      if (error) throw error;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['alerts'] }),
   });
 

@@ -410,16 +410,15 @@ export function HomePage() {
       .slice(0, DISPLAY_SIZE)
       .map((p) => p.id);
 
-    supabase.from('analysis_queue')
-      .delete().eq('campaign_id', activeCampaignId)
-      .then(() =>
-        newQueueIds.length > 0
-          ? supabase.from('analysis_queue').insert(
-              newQueueIds.map((post_id) => ({ campaign_id: activeCampaignId, post_id })),
-            )
-          : Promise.resolve(),
-      )
-      .then(() => qc.invalidateQueries({ queryKey: ['analysis-queue', activeCampaignId] }));
+    void (async () => {
+      await supabase.from('analysis_queue').delete().eq('campaign_id', activeCampaignId);
+      if (newQueueIds.length > 0) {
+        await supabase.from('analysis_queue').insert(
+          newQueueIds.map((post_id) => ({ campaign_id: activeCampaignId, post_id })),
+        );
+      }
+      qc.invalidateQueries({ queryKey: ['analysis-queue', activeCampaignId] });
+    })();
   }
 
   // ── Seed excluded from DB on initial load ─────────────────────

@@ -37,7 +37,10 @@ function AnalysisSteps({ running }: { running: boolean }) {
     const startedAt = Date.now();
     timerRef.current = setInterval(() => {
       const elapsed = Date.now() - startedAt;
-      const next = ANALYSIS_STEPS.findLastIndex((s) => elapsed >= s.ms);
+      let next = -1;
+      for (let i = ANALYSIS_STEPS.length - 1; i >= 0; i--) {
+        if (elapsed >= ANALYSIS_STEPS[i].ms) { next = i; break; }
+      }
       setStep(Math.max(0, next));
     }, 300);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
@@ -352,7 +355,12 @@ export function AnalisePage() {
         const [latest, ...history] = analyses;
 
         function AnalysisBody({ a }: { a: typeof latest }) {
-          const gc = a.generated_content as Record<string, unknown> | null;
+          const gc = a.generated_content as {
+            caption?: string;
+            visualDescription?: string;
+            hashtags?: string[];
+            bestPostingTime?: string;
+          } | null;
           return (
             <CardContent className="pt-0 space-y-0">
               {a.reasoning && (
