@@ -49,7 +49,32 @@ function buildAnalysisPrompt(data: {
       }).join('\n')
     : 'No events detected yet.';
 
-  return `# Trend Intelligence Report -- ${date}\nCampaign: ${theme}\n\nYou are a content analyst for this campaign. Review the data below and identify which posts represent genuine news worth creating Instagram content about.\n\n---\n\n## Trending Hashtags (Last 24h)\n${hashtagSection}\n\n---\n\n## Posts from Tracked Sources\n${postsSection}\n\n---\n\n## Detected News Events\n${eventsSection}\n\n---\n\n## Your Task\n\nAnalyze the posts and events above. Select the ones that are truly newsworthy for the **${data.campaignName}** campaign.\n\n**Return ONLY the following JSON -- no extra text, no markdown, just valid JSON:**\n\n{"selectedPostIds":["post_id_1"],"mainTopic":"One-line description","reasoning":"Why newsworthy","suggestedHashtags":["hashtag1"],"contentIdeas":["Idea 1: ..."],"urgencyLevel":"high","contentFormat":"reel"}\n\n**urgencyLevel:** "high" (breaking, <6h), "medium" (trending, <48h), "low" (evergreen)\n**contentFormat:** "reel", "carousel", "image", or "any"\n`;
+  return `You are a content analyst. Today is ${date}. Campaign: ${theme}.
+
+Review the Instagram data below and produce a JSON analysis object.
+
+## Trending Hashtags (Last 24h)
+${hashtagSection}
+
+## Posts from Tracked Sources
+${postsSection}
+
+## Detected News Events
+${eventsSection}
+
+## Instructions
+
+Based on the data above, fill in ALL of these JSON fields with real content from the data:
+
+- selectedPostIds: array of post IDs (from the ### headings above) that are most newsworthy
+- mainTopic: a specific one-line summary of the dominant trend you found (NOT a placeholder)
+- reasoning: 2-3 sentences explaining why this content is newsworthy for ${data.campaignName}
+- suggestedHashtags: 5-8 relevant hashtags (without #) based on the trending data
+- contentIdeas: 3-5 specific content ideas for Instagram posts about this trend
+- urgencyLevel: exactly one of "high" (breaking <6h), "medium" (trending <48h), or "low" (evergreen)
+- contentFormat: exactly one of "reel", "carousel", "image", or "any"
+
+Respond with a single JSON object containing exactly those 7 fields. All string fields must be non-empty.`;
 }
 
 function buildContentPrompt(data: {
@@ -107,9 +132,14 @@ function getAvailableProviders(): string[] {
 }
 
 function extractJson(text: string): Record<string, unknown> {
+  // 1. Try fenced code block first
   const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  const clean = codeBlock ? codeBlock[1] : text.trim();
-  return JSON.parse(clean);
+  if (codeBlock) return JSON.parse(codeBlock[1]);
+  // 2. Try to find a raw JSON object anywhere in the text
+  const objMatch = text.match(/\{[\s\S]*\}/);
+  if (objMatch) return JSON.parse(objMatch[0]);
+  // 3. Fall back to parsing the whole trimmed text
+  return JSON.parse(text.trim());
 }
 
 async function callAI(prompt: string): Promise<Record<string, unknown>> {
@@ -127,7 +157,8 @@ async function callAI(prompt: string): Promise<Record<string, unknown>> {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 1024,
+        max_tokens: 2048,
+        system: 'You are a JSON-only responder. Output valid JSON with no extra text, no markdown, no explanation.',
         messages: [{ role: 'user', content: prompt }],
       }),
     });
@@ -156,14 +187,27 @@ async function callAI(prompt: string): Promise<Record<string, unknown>> {
 
   if (ollamaUrl) {
     const model = Deno.env.get('OLLAMA_MODEL') || 'llama3';
-    const res = await fetch(`${ollamaUrl}/api/generate`, {
+    const res = await fetch(`${ollamaUrl}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, prompt, stream: false, format: 'json' }),
+      body: JSON.stringify({
+        model,
+        stream: false,
+        format: 'json',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a JSON-only responder. Output valid JSON with no extra text, no markdown, no explanation.',
+          },
+          { role: 'user', content: prompt },
+        ],
+      }),
     });
     if (!res.ok) throw new Error(`Ollama error ${res.status}: ${await res.text()}`);
     const json = await res.json();
-    return extractJson(json.response);
+    const raw = json.message?.content ?? json.response ?? '';
+    console.log('[analysis/ollama] raw response:', raw.slice(0, 500));
+    return extractJson(raw);
   }
 
   throw new Error('No AI provider configured. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or OLLAMA_URL.');
@@ -263,17 +307,27 @@ Deno.serve(async (req) => {
       console.log('[analysis/run] calling AI, provider:', getAvailableProviders()[0]);
       const aiResult = await callAI(prompt);
 
-      const body = {
-        selectedPostIds: aiResult.selectedPostIds as string[] ?? [],
-        mainTopic: aiResult.mainTopic as string,
-        reasoning: aiResult.reasoning as string ?? null,
-        suggestedHashtags: aiResult.suggestedHashtags as string[] ?? [],
-        contentIdeas: aiResult.contentIdeas as string[] ?? [],
-        urgencyLevel: aiResult.urgencyLevel as string ?? 'medium',
-        contentFormat: aiResult.contentFormat as string ?? 'any',
+      // Normalise AI output — small models sometimes return strings instead of arrays
+      const toArray = (v: unknown): string[] => {
+        if (Array.isArray(v)) return v.map(String);
+        if (typeof v === 'string' && v.length) return v.split(',').map((s) => s.trim()).filter(Boolean);
+        return [];
       };
 
-      if (!body.mainTopic) throw new Error('AI returned invalid JSON — missing mainTopic field');
+      const body = {
+        selectedPostIds: toArray(aiResult.selectedPostIds),
+        mainTopic: (aiResult.mainTopic as string) ?? '',
+        reasoning: (aiResult.reasoning as string) ?? null,
+        suggestedHashtags: toArray(aiResult.suggestedHashtags),
+        contentIdeas: toArray(aiResult.contentIdeas),
+        urgencyLevel: (aiResult.urgencyLevel as string) ?? 'medium',
+        contentFormat: (aiResult.contentFormat as string) ?? 'any',
+      };
+
+      if (!body.mainTopic) {
+        console.error('[analysis/run] aiResult sample:', JSON.stringify(aiResult).slice(0, 500));
+        throw new Error('AI returned empty analysis — model did not fill in mainTopic. Try a more capable model.');
+      }
 
       let selectedPosts: Array<Record<string, unknown>> = [];
       if (body.selectedPostIds.length) {
@@ -317,7 +371,7 @@ Deno.serve(async (req) => {
         generated_content: generatedContent,
       }).select().single();
 
-      if (error) throw error;
+      if (error) throw new Error(`DB insert failed: ${error.message ?? JSON.stringify(error)}`);
 
       return new Response(JSON.stringify({ ok: true, analysis }), {
         status: 201,
@@ -379,7 +433,7 @@ Deno.serve(async (req) => {
         content_prompt: contentPrompt,
       }).select().single();
 
-      if (error) throw error;
+      if (error) throw new Error(`DB insert failed: ${error.message ?? JSON.stringify(error)}`);
       return new Response(JSON.stringify({ ok: true, analysis }), {
         status: 201,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

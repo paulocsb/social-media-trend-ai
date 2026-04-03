@@ -27,7 +27,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
           <p className="text-[15px] font-semibold text-primary">{title}</p>
           <button
             onClick={onClose}
-            className="p-2 rounded-full border bg-white/5 border-white/8 text-tertiary hover:bg-white/12 hover:border-white/14 hover:text-primary active:scale-95 transition-all duration-150"
+            className="p-2 rounded-full border bg-surface-inset border-border-subtle text-tertiary hover:bg-surface-active hover:border-border hover:text-primary active:scale-95 transition-all duration-150"
           >
             <X className="w-4 h-4" />
           </button>
@@ -330,7 +330,7 @@ export function SetupPage() {
   }
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-title-xl">Setup</h1>
@@ -339,175 +339,184 @@ export function SetupPage() {
         </Button>
       </div>
 
-      {/* Campaigns */}
-      <section className="space-y-3">
-        <h2 className="text-title">Campaigns</h2>
-
-        {campaigns.length === 0 ? (
-          <Card>
-            <CardContent className="py-8 text-center">
-              <Megaphone className="w-8 h-8 text-tertiary mx-auto mb-3" />
-              <p className="text-[14px] text-secondary">No campaigns yet.</p>
-              <p className="text-caption mt-1">Create one to start tracking hashtags and profiles.</p>
-            </CardContent>
-          </Card>
-        ) : (() => {
-          const active = campaigns.find((c) => c.id === activeCampaignId);
-          const others = campaigns.filter((c) => c.id !== activeCampaignId);
-
-          function CampaignRow({ c, isActive }: { c: Campaign; isActive: boolean }) {
-            return (
-              <div className={cn(
-                'flex items-center gap-3 px-4 py-3.5 rounded-xl border transition-all',
-                isActive ? 'glass-raised border-accent/30' : 'glass border-border-subtle',
-              )}>
-                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.color }} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[14px] font-semibold truncate">{c.name}</p>
-                  {c.description && <p className="text-caption mt-0.5 truncate">{c.description}</p>}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {isActive ? (
-                    <Badge variant="default">Active</Badge>
-                  ) : (
-                    <Button variant="secondary" size="sm" onClick={() => setActiveCampaignId(c.id)}>
-                      Select
-                    </Button>
-                  )}
-                  <IconButton
-                    icon={Pencil}
-                    onClick={() => setModal({ type: 'edit-campaign', campaign: c })}
-                    title="Edit"
-                  />
-                  <IconButton
-                    icon={Trash2}
-                    variant="destructive"
-                    onClick={() => setModal({ type: 'delete-campaign', campaign: c })}
-                    title="Delete"
-                  />
+      {campaigns.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Megaphone className="w-8 h-8 text-tertiary mx-auto mb-3" />
+            <p className="text-[14px] text-secondary">No campaigns yet.</p>
+            <p className="text-caption mt-1">Create one to start tracking hashtags and profiles.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* ── Active campaign context ───────────────────────────── */}
+          {activeCampaign ? (
+            <>
+              {/* Campaign card */}
+              <div className="glass-raised rounded-2xl border border-accent/20 overflow-hidden">
+                <div className="h-1 w-full" style={{ background: activeCampaign.color }} />
+                <div className="flex items-center gap-4 px-5 py-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-[16px] font-semibold truncate">{activeCampaign.name}</p>
+                      <Badge variant="default">Active</Badge>
+                    </div>
+                    {activeCampaign.description && (
+                      <p className="text-[13px] text-secondary mt-0.5 truncate">{activeCampaign.description}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <IconButton
+                      icon={Pencil}
+                      onClick={() => setModal({ type: 'edit-campaign', campaign: activeCampaign })}
+                      title="Edit campaign"
+                    />
+                    <IconButton
+                      icon={Trash2}
+                      variant="destructive"
+                      onClick={() => setModal({ type: 'delete-campaign', campaign: activeCampaign })}
+                      title="Delete campaign"
+                    />
+                  </div>
                 </div>
               </div>
-            );
-          }
 
-          return (
-            <div className="space-y-3">
-              {/* Active campaign — always prominent */}
-              {active && <CampaignRow c={active} isActive />}
-
-              {/* Others — compact scrollable list */}
-              {others.length > 0 && (
-                <div className="space-y-1.5">
-                  <p className="text-label px-1">Other campaigns</p>
-                  <div className="space-y-1.5 max-h-[168px] overflow-y-auto pr-1">
-                    {others.map((c) => <CampaignRow key={c.id} c={c} isActive={false} />)}
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })()}
-      </section>
-
-      {/* Active campaign detail */}
-      {activeCampaign && (
-        <>
-          <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-border-subtle" />
-            <span className="text-[12px] text-tertiary flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full" style={{ background: activeCampaign.color }} />
-              {activeCampaign.name}
-            </span>
-            <div className="h-px flex-1 bg-border-subtle" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-5">
-            {/* Hashtags */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-1.5">
-                  <Hash className="w-3.5 h-3.5 text-accent" /> Hashtags
-                </CardTitle>
-                <button
-                  onClick={() => setModal({ type: 'add-hashtag' })}
-                  className="flex items-center gap-1 text-[12px] text-accent hover:text-accent-hover transition-colors font-medium"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add
-                </button>
-              </CardHeader>
-              <CardContent className="pt-0">
-                {hashtags.length === 0 ? (
-                  <p className="text-caption py-2">No hashtags tracked yet.</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {hashtags.map((row) => (
-                      <div
-                        key={row.id}
-                        className={cn(
-                          'flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full text-[13px] font-medium transition-all',
-                          row.active ? 'bg-accent/15 text-accent' : 'bg-white/8 text-tertiary',
-                        )}
-                      >
-                        <button
-                          onClick={() => toggleHashtag.mutate({ id: row.id, active: !row.active })}
-                          className="hover:opacity-70 transition-opacity"
-                          title={row.active ? 'Disable' : 'Enable'}
-                        >
-                          #{row.hashtag}
-                        </button>
-                        <button
-                          onClick={() => removeHashtag.mutate(row.id)}
-                          className="hover:text-destructive transition-colors"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
+              {/* Hashtags + Profiles */}
+              <div className="grid grid-cols-2 gap-5">
+                {/* Hashtags */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-1.5">
+                      <Hash className="w-3.5 h-3.5 text-accent" /> Hashtags
+                    </CardTitle>
+                    <button
+                      onClick={() => setModal({ type: 'add-hashtag' })}
+                      className="flex items-center gap-1 text-[12px] text-accent hover:text-accent-hover transition-colors font-medium"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add
+                    </button>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    {hashtags.length === 0 ? (
+                      <p className="text-caption py-2">No hashtags tracked yet.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {hashtags.map((row) => (
+                          <div
+                            key={row.id}
+                            className={cn(
+                              'flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full text-[13px] font-medium transition-all',
+                              row.active ? 'bg-accent/15 text-accent' : 'bg-surface-tint text-tertiary',
+                            )}
+                          >
+                            <button
+                              onClick={() => toggleHashtag.mutate({ id: row.id, active: !row.active })}
+                              className="hover:opacity-70 transition-opacity"
+                              title={row.active ? 'Disable' : 'Enable'}
+                            >
+                              #{row.hashtag}
+                            </button>
+                            <button
+                              onClick={() => removeHashtag.mutate(row.id)}
+                              className="hover:text-destructive transition-colors"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                )}
-                {hashtags.some((h) => !h.active) && (
-                  <p className="text-[11px] text-tertiary mt-3">Dimmed hashtags are disabled — click to toggle.</p>
-                )}
+                    )}
+                    {hashtags.some((h) => !h.active) && (
+                      <p className="text-[11px] text-tertiary mt-3">Dimmed hashtags are disabled — click to toggle.</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Profiles */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-accent" /> Profiles
+                    </CardTitle>
+                    <button
+                      onClick={() => setModal({ type: 'add-profile' })}
+                      className="flex items-center gap-1 text-[12px] text-accent hover:text-accent-hover transition-colors font-medium"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add
+                    </button>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    {profiles.length === 0 ? (
+                      <p className="text-caption py-2">No profiles tracked yet.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {profiles.map((row) => (
+                          <div
+                            key={row.id}
+                            className="flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full text-[13px] font-medium bg-accent/15 text-accent"
+                          >
+                            @{row.handle}
+                            <button
+                              onClick={() => removeProfile.mutate(row.id)}
+                              className="hover:text-destructive transition-colors"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          ) : (
+            <Card>
+              <CardContent className="py-8 text-center">
+                <p className="text-[14px] text-secondary">No campaign selected.</p>
+                <p className="text-caption mt-1">Select one from the list below.</p>
               </CardContent>
             </Card>
+          )}
 
-            {/* Profiles */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-accent" /> Profiles
-                </CardTitle>
-                <button
-                  onClick={() => setModal({ type: 'add-profile' })}
-                  className="flex items-center gap-1 text-[12px] text-accent hover:text-accent-hover transition-colors font-medium"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add
-                </button>
-              </CardHeader>
-              <CardContent className="pt-0">
-                {profiles.length === 0 ? (
-                  <p className="text-caption py-2">No profiles tracked yet.</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {profiles.map((row) => (
-                      <div
-                        key={row.id}
-                        className="flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full text-[13px] font-medium bg-accent/15 text-accent"
-                      >
-                        @{row.handle}
-                        <button
-                          onClick={() => removeProfile.mutate(row.id)}
-                          className="hover:text-destructive transition-colors"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
+          {/* ── Other campaigns ──────────────────────────────────── */}
+          {campaigns.filter((c) => c.id !== activeCampaignId).length > 0 && (
+            <section className="space-y-2">
+              <h2 className="text-label px-1">Other campaigns</h2>
+              <div className="space-y-1.5">
+                {campaigns.filter((c) => c.id !== activeCampaignId).map((c) => (
+                  <div
+                    key={c.id}
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl border glass border-border-subtle"
+                  >
+                    <div className="w-2 h-2 rounded-full shrink-0 opacity-50" style={{ background: c.color }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-medium text-secondary truncate">{c.name}</p>
+                      {c.description && (
+                        <p className="text-[11px] text-tertiary truncate">{c.description}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button variant="secondary" size="sm" onClick={() => setActiveCampaignId(c.id)}>
+                        Select
+                      </Button>
+                      <IconButton
+                        icon={Pencil}
+                        onClick={() => setModal({ type: 'edit-campaign', campaign: c })}
+                        title="Edit"
+                      />
+                      <IconButton
+                        icon={Trash2}
+                        variant="destructive"
+                        onClick={() => setModal({ type: 'delete-campaign', campaign: c })}
+                        title="Delete"
+                      />
+                    </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                ))}
+              </div>
+            </section>
+          )}
         </>
       )}
 

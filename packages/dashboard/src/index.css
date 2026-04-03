@@ -2,6 +2,84 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ----------------------------------------------------------------
+   Theme tokens — light (:root) and dark (.dark)
+   Main surface/text tokens use R G B channels so Tailwind's
+   opacity modifiers (bg-background/50, text-primary/80) work.
+   Surface-interaction tokens are pre-mixed rgba values.
+---------------------------------------------------------------- */
+:root {
+  /* Surfaces — light mode: Apple #f5f5f7 palette */
+  --background:    245 245 247;   /* #f5f5f7 */
+  --surface:       255 255 255;   /* #ffffff */
+  --surface-raised:237 237 240;   /* slightly off-white */
+  --primary:        29  29  31;   /* #1d1d1f */
+
+  /* Semi-transparent texts */
+  --secondary:      rgba(0,0,0,0.80);
+  --tertiary:       rgba(0,0,0,0.48);
+
+  /* Borders */
+  --border:         rgba(0,0,0,0.08);
+  --border-subtle:  rgba(0,0,0,0.04);
+
+  /* Semantic */
+  --success:   #28cd41;
+  --warning:   #ff9500;
+  --destructive:#ff3b30;
+  --info:      #007aff;
+
+  /* Interactive surfaces — invert between modes */
+  --surface-inset:  rgba(0,0,0,0.04);
+  --surface-hover:  rgba(0,0,0,0.05);
+  --surface-active: rgba(0,0,0,0.08);
+  --surface-tint:   rgba(0,0,0,0.06);
+  --surface-strong: rgba(0,0,0,0.14);
+
+  /* Glass — light: frosted white */
+  --glass-bg:             rgba(255,255,255,0.72);
+  --glass-border:         rgba(0,0,0,0.08);
+  --glass-shadow:         rgba(0,0,0,0.10) 3px 5px 30px 0px;
+  --glass-raised-bg:      rgba(255,255,255,0.88);
+  --glass-raised-shadow:  rgba(0,0,0,0.14) 0px 8px 40px 0px;
+  --glass-sidebar-bg:     rgba(245,245,247,0.85);
+  --glass-sidebar-border: rgba(0,0,0,0.06);
+}
+
+.dark {
+  /* Surfaces — dark mode: Apple dark palette */
+  --background:     0   0   0;   /* #000000 */
+  --surface:       28  28  30;   /* #1c1c1e */
+  --surface-raised:44  44  46;   /* #2c2c2e */
+  --primary:      255 255 255;   /* #ffffff */
+
+  --secondary:     rgba(235,235,245,0.60);
+  --tertiary:      rgba(235,235,245,0.35);
+
+  --border:        rgba(255,255,255,0.08);
+  --border-subtle: rgba(255,255,255,0.05);
+
+  --success:    #30d158;
+  --warning:    #ff9f0a;
+  --destructive:#ff453a;
+  --info:       #64d2ff;
+
+  --surface-inset:  rgba(255,255,255,0.05);
+  --surface-hover:  rgba(255,255,255,0.06);
+  --surface-active: rgba(255,255,255,0.12);
+  --surface-tint:   rgba(255,255,255,0.08);
+  --surface-strong: rgba(255,255,255,0.20);
+
+  /* Glass — dark: Apple translucent dark */
+  --glass-bg:             rgba(28,28,30,0.72);
+  --glass-border:         rgba(255,255,255,0.08);
+  --glass-shadow:         rgba(0,0,0,0.22) 3px 5px 30px 0px;
+  --glass-raised-bg:      rgba(44,44,46,0.82);
+  --glass-raised-shadow:  rgba(0,0,0,0.36) 0px 8px 40px 0px;
+  --glass-sidebar-bg:     rgba(0,0,0,0.82);
+  --glass-sidebar-border: rgba(255,255,255,0.06);
+}
+
 @layer base {
   *, *::before, *::after { box-sizing: border-box; }
 
@@ -14,6 +92,7 @@
   body {
     @apply bg-background text-primary font-sans text-[14px] leading-relaxed;
     margin: 0;
+    transition: background-color 0.2s ease, color 0.1s ease;
   }
 
   ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -21,60 +100,72 @@
   ::-webkit-scrollbar-thumb { @apply bg-border rounded-full; }
   ::-webkit-scrollbar-thumb:hover { @apply bg-tertiary; }
 
+  /* Apple Blue focus ring */
   :focus-visible {
-    outline: 2px solid #B9DB23;
+    outline: 2px solid #0071e3;
     outline-offset: 2px;
     border-radius: 6px;
   }
 }
 
 @layer components {
-  /* Typography utilities — SF Pro scale */
-  .text-headline-xl { @apply text-[48px] font-bold tracking-tight leading-tight; }
-  .text-headline-lg { @apply text-[40px] font-bold tracking-tight leading-tight; }
-  .text-headline-md { @apply text-[32px] font-bold tracking-tight leading-tight; }
-  .text-title-xl    { @apply text-[28px] font-semibold tracking-tight leading-tight; }
-  .text-title-lg    { @apply text-[24px] font-semibold tracking-tight leading-tight; }
-  .text-title       { @apply text-[18px] font-semibold; }
-  .text-body-xl     { @apply text-[20px] font-normal; }
-  .text-body-lg     { @apply text-[18px] font-normal; }
-  .text-body        { @apply text-[14px] font-normal; }
-  .text-body-sm     { @apply text-[12px] font-normal; }
-  .text-caption     { @apply text-[11px] text-secondary; }
+  /* Typography utilities — SF Pro optical sizing + Apple letter-spacing
+     font-display (SF Pro Display) at ≥20px; font-sans (SF Pro Text) below */
+  .text-headline-xl { @apply font-display text-[48px] font-semibold leading-[52px] tracking-[-0.28px]; }
+  .text-headline-lg { @apply font-display text-[40px] font-semibold leading-[44px] tracking-[-0.28px]; }
+  .text-headline-md { @apply font-display text-[32px] font-semibold leading-[36px] tracking-[-0.28px]; }
+  .text-title-xl    { @apply font-display text-[28px] font-semibold leading-[34px] tracking-[-0.28px]; }
+  .text-title-lg    { @apply font-display text-[24px] font-semibold leading-[30px] tracking-[-0.374px]; }
+  .text-title       { @apply text-[18px] font-semibold tracking-[-0.374px]; }
+  .text-body-xl     { @apply font-display text-[20px] font-normal tracking-[-0.374px]; }
+  .text-body-lg     { @apply text-[18px] font-normal tracking-[-0.374px]; }
+  .text-body        { @apply text-[14px] font-normal tracking-[-0.224px]; }
+  .text-body-sm     { @apply text-[12px] font-normal tracking-[-0.12px]; }
+  .text-caption     { @apply text-[11px] text-secondary tracking-[-0.12px]; }
   .text-label       { @apply text-[11px] font-medium uppercase tracking-wider text-tertiary; }
 
-  /* glass-primary: drop shadow + background blur */
+  /* Glass — uses CSS vars, adapts to light/dark automatically */
   .glass {
-    background: rgba(51, 56, 61, 0.45);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    box-shadow: var(--glass-shadow);
   }
 
-  /* Elevated glass — modals, raised panels */
   .glass-raised {
-    background: rgba(51, 56, 61, 0.65);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    background: var(--glass-raised-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: saturate(180%) blur(24px);
+    -webkit-backdrop-filter: saturate(180%) blur(24px);
+    box-shadow: var(--glass-raised-shadow);
   }
 
-  /* Sidebar */
   .glass-sidebar {
-    background: rgba(25, 27, 30, 0.92);
-    border-right: 1px solid rgba(255, 255, 255, 0.06);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
+    background: var(--glass-sidebar-bg);
+    border-right: 1px solid var(--glass-sidebar-border);
+    backdrop-filter: saturate(180%) blur(24px);
+    -webkit-backdrop-filter: saturate(180%) blur(24px);
   }
 
-  /* stroke-button: white 5% fill + inner shadow */
+  /* Stroke button */
   .stroke-button {
-    background: rgba(255, 255, 255, 0.05);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05), 0 2px 8px rgba(0, 0, 0, 0.4);
+    background: var(--surface-inset);
+    box-shadow: inset 0 0 0 1px var(--border-subtle), 0 2px 8px rgba(0,0,0,0.2);
   }
 
   .card    { @apply glass rounded-xl; }
   .divider { @apply border-t border-border-subtle; }
+
+  /* Skeleton shimmer */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--surface-inset) 0%,
+      var(--surface-tint) 50%,
+      var(--surface-inset) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
 }

@@ -1,7 +1,8 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Home, Search, BarChart2, History, Settings, User, LogOut, ChevronDown } from 'lucide-react';
+import { Home, Search, BarChart2, History, Settings, User, LogOut, ChevronDown, Sun, Moon } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useCampaign } from '../../lib/campaign';
+import { useTheme } from '../../lib/theme';
 import { supabase } from '../../lib/supabase';
 
 const NAV = [
@@ -14,12 +15,21 @@ const NAV = [
 
 export function Sidebar() {
   const { campaigns, activeCampaign, setActiveCampaignId } = useCampaign();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   async function handleSignOut() {
     await supabase.auth.signOut();
     navigate('/login');
   }
+
+  const navItem = ({ isActive }: { isActive: boolean }) =>
+    cn(
+      'flex items-center gap-2.5 px-3 py-2 rounded-md text-[14px] transition-colors',
+      isActive
+        ? 'bg-accent/15 text-accent font-medium'
+        : 'text-secondary hover:bg-surface-hover hover:text-primary',
+    );
 
   return (
     <aside className="flex flex-col w-[220px] min-h-screen glass-sidebar shrink-0">
@@ -36,7 +46,7 @@ export function Sidebar() {
               value={activeCampaign?.id ?? ''}
               onChange={(e) => setActiveCampaignId(e.target.value)}
               className={cn(
-                'w-full appearance-none rounded-md bg-white/5 px-3 pr-7 py-2',
+                'w-full appearance-none rounded-md bg-surface-inset px-3 pr-7 py-2',
                 'text-[13px] font-medium text-primary border border-border-subtle',
                 'hover:border-border transition-colors cursor-pointer',
                 'focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30',
@@ -57,19 +67,7 @@ export function Sidebar() {
       {/* Nav */}
       <nav className="flex-1 px-3 pt-4 space-y-0.5">
         {NAV.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-2.5 px-3 py-2 rounded-md text-[14px] transition-colors',
-                isActive
-                  ? 'bg-accent/15 text-accent font-medium shadow-glow-sm'
-                  : 'text-secondary hover:bg-white/5 hover:text-primary',
-              )
-            }
-          >
+          <NavLink key={to} to={to} end={to === '/'} className={navItem}>
             <Icon className="w-4 h-4 shrink-0" />
             {label}
           </NavLink>
@@ -78,23 +76,23 @@ export function Sidebar() {
 
       {/* Bottom */}
       <div className="px-3 pb-4 border-t border-border-subtle pt-3 space-y-0.5">
-        <NavLink
-          to="/account"
-          className={({ isActive }) =>
-            cn(
-              'flex items-center gap-2.5 px-3 py-2 rounded-md text-[14px] transition-colors',
-              isActive
-                ? 'bg-accent/15 text-accent font-medium'
-                : 'text-secondary hover:bg-white/5 hover:text-primary',
-            )
-          }
-        >
+        <NavLink to="/account" className={navItem}>
           <User className="w-4 h-4 shrink-0" />
           Account
         </NavLink>
+
+        {/* Theme toggle */}
+        <button
+          onClick={toggleTheme}
+          className="flex w-full items-center gap-2.5 px-3 py-2 rounded-md text-[14px] text-secondary hover:bg-surface-hover hover:text-primary transition-colors"
+        >
+          {theme === 'dark' ? <Sun className="w-4 h-4 shrink-0" /> : <Moon className="w-4 h-4 shrink-0" />}
+          {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+        </button>
+
         <button
           onClick={handleSignOut}
-          className="flex w-full items-center gap-2.5 px-3 py-2 rounded-md text-[14px] text-secondary hover:bg-white/5 hover:text-destructive transition-colors"
+          className="flex w-full items-center gap-2.5 px-3 py-2 rounded-md text-[14px] text-secondary hover:bg-surface-hover hover:text-destructive transition-colors"
         >
           <LogOut className="w-4 h-4 shrink-0" />
           Sign out
