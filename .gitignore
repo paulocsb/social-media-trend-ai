@@ -1,8 +1,43 @@
+# ── Dependencies ─────────────────────────────────────────────────
 node_modules/
+.pnp
+.pnp.js
+
+# ── Build outputs ────────────────────────────────────────────────
 dist/
+build/
 .turbo/
 *.tsbuildinfo
 
-# Local env overrides — never commit
+# ── Environment files ────────────────────────────────────────────
+.env
 .env.local
+.env.*.local
+*/.env
 */.env.local
+*/.env.*.local
+
+# ── IDE / editor ─────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ── OS ───────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Claude Code ──────────────────────────────────────────────────
+.claude/
+
+# ── Supabase local state ─────────────────────────────────────────
+supabase/.branches/
+supabase/.temp/
+supabase/snippets/
+
+# ── Logs ─────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+pnpm-debug.log*
